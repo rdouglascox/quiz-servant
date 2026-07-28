@@ -31,9 +31,9 @@ COPY --from=build /out/ /usr/local/bin/
 # subprocess or library that reads the locale behaving sanely too.
 ENV LANG=C.UTF-8
 
-# Responses are appended here as JSONL. On Fly this is the machine rootfs,
-# which survives stop/start (so auto-stop mid-lecture is safe) but not a
-# deploy. Nothing here is expected to outlive the lecture it was collected in.
+# Responses are appended here as JSONL. In production /data MUST be a mounted
+# volume: a Fly machine's rootfs does not survive stop/start, so without one an
+# auto-stop silently discards the lecture. See fly.toml's [[mounts]].
 ENV QUIZ_LOG=/data/responses.jsonl
 RUN mkdir -p /data
 

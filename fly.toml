@@ -5,10 +5,16 @@ primary_region = "syd"
 
 [env]
   PORT = "8080"
-  # Rootfs, not a volume. Survives stop/start — which is what makes auto-stop
-  # safe mid-lecture — but not a deploy. See DESIGN.md.
   QUIZ_LOG = "/data/responses.jsonl"
   QUIZ_BASE_URL = "https://quiz-servant.fly.dev"
+
+# A real volume, because a Machine's rootfs does NOT survive stop/start —
+# verified the hard way: after an auto-stop the server came back up logging
+# "starting from an empty log" and a lecture's responses were gone. Without
+# this, auto-stop silently discards the session mid-lecture.
+[[mounts]]
+  source = "quiz_data"
+  destination = "/data"
 
 # QUIZ_ADMIN_TOKEN is a secret:
 #   fly secrets set QUIZ_ADMIN_TOKEN="$(openssl rand -hex 24)"

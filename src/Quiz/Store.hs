@@ -6,8 +6,10 @@
 -- log necessarily reproduces the state that produced it.
 --
 -- The log's job is not archival durability — see DESIGN.md — it is to survive a
--- machine auto-stopping mid-lecture, since Fly retains a rootfs across
--- stop/start. It is also the export format: @quizctl pull@ just fetches it.
+-- machine auto-stopping mid-lecture. That requires @QUIZ_LOG@ to point at a
+-- real volume: a Fly machine's rootfs does /not/ survive stop/start, which
+-- cost a lecture's responses before it was noticed. It is also the export
+-- format: @quizctl pull@ just fetches it.
 module Quiz.Store
   ( -- * Identifiers
     SessionId (..)

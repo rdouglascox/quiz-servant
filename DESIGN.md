@@ -67,8 +67,8 @@ is left open.
 Responses that are not pulled shortly after the lecture are expected to be
 lost. That permits:
 
-- **No volume, no SQLite, and no migrations.** The schema can be reshaped
-  freely and redeployed.
+- **No SQLite and no migrations.** The schema can be reshaped freely and
+  redeployed.
 - Live state is an in-memory value behind a `TVar`; STM handles concurrent
   increments.
 - Every response is also appended to a JSONL file. **The storage format is the
@@ -76,13 +76,20 @@ lost. That permits:
   into jq, pandas, or R.
 
 The log is not for archival durability. Its job is to survive an auto-stop
-*within* a lecture: Fly retains a machine's rootfs across stop/start, so
-replaying the log on wake restores the session transparently. Pure in-memory
-state would vanish if the machine idled out during twenty minutes of non-quiz
-slides.
+*within* a lecture: pure in-memory state would vanish if the machine idled out
+during twenty minutes of non-quiz slides, taking the session and every answer
+so far with it.
 
-The rootfs does not survive `fly deploy`. Restating the rule: **do not deploy
-during a lecture.**
+**That requires a volume, and this was originally got wrong.** The first
+design put the log on the machine rootfs, on the assumption that Fly preserves
+it across stop/start. It does not. Verified on the deployed app: after an
+auto-stop the server came back logging `starting from an empty log` and a
+lecture's responses were gone. A 1GB volume mounted at `/data` fixes it for
+$0.15/month, and the fix is verified the same way — a stop/start now logs
+`replayed 9 event(s)` and the tallies come back intact.
+
+Never assert this property again without testing it: seed some responses,
+`fly machine stop` then `start`, and check the boot log says `replayed`.
 
 **Ephemerality does not permit more than one instance.** State is
 machine-local either way, so two machines would serve two different tallies to
@@ -284,6 +291,9 @@ brew install flyctl
 fly auth login
 fly apps create quiz-servant
 
+# Not optional: the rootfs does not persist across stop/start.
+fly volumes create quiz_data --size 1 --region syd
+
 # Write the token locally FIRST, then push that same value to Fly. Fly secrets
 # are write-only: generating one inline loses it forever.
 mkdir -p ~/.config/quizctl
@@ -315,9 +325,10 @@ only after it has gone green once, and never for the first deploy.
 
 ### Costs
 
-Roughly **$0.30/month** with auto-stop, since compute is billed per second and
-a few teaching hours a week is a few cents. Always-on would be ~$3.50. There is
-no volume, so no storage line beyond the stopped-machine rootfs.
+Roughly **$0.45/month**: ~$0.30 compute with auto-stop, since billing is
+per-second and a few teaching hours a week is a few cents, plus $0.15 for the
+1GB volume. Always-on would be ~$3.65. Volume snapshots are free under the
+10GB monthly allowance.
 
 ### The two rules that matter
 
@@ -336,8 +347,9 @@ Worth adding to the pre-lecture ritual, since nothing in the app can detect it
 — `quizctl status` talks to whichever machine answers and looks perfectly
 healthy either way.
 
-**Never `fly deploy` during a lecture.** A deploy replaces the machine, and the
-response log lives on the rootfs. Stop/start preserves it; deploy does not.
+**Never `fly deploy` during a lecture.** A deploy replaces the machine. The
+volume and its log survive that, but the machine is gone for a minute or two
+mid-replacement, which is not something to do in front of a room.
 
 ## Build order
 
