@@ -1,0 +1,367 @@
+# quiz-servant — design
+
+A deliberately small alternative to Mentimeter for lectures. Quizzes are
+authored locally as YAML, pushed to a server with a CLI, and answered by
+students on a plain HTML page. Results appear live on the lecture slides.
+
+This file records decisions and, more importantly, why they were made — so that
+a future change knows what it is trading away.
+
+## The load-bearing idea
+
+**Presenter state lives on the server; every client is a dumb poller; every
+student action is a plain `<form method=POST>`.**
+
+That single choice removes websockets, SSE, a JS build step, and client-side
+state management. A phone submitting an answer is a form POST returning a
+"thanks" page — no JS required, works on any device. Live-ness is a
+2-second `location.reload()` inside an iframe.
+
+## Decisions
+
+### Students are fully anonymous
+
+No identity is stored: no accounts, no names, no server-side pseudonyms. A
+response is `(session, question, answer, timestamp)` and nothing more.
+
+Consequences, accepted deliberately:
+
+- **No deduplication.** The number on the projector is *responses*, not
+  *students*. Nothing distinguishes 30 students answering once from 3 students
+  answering ten times. Label it honestly.
+- **Ballot stuffing is possible.** Mitigations are cheap and partial: POST →
+  303 → terminal page (kills accidental refresh-resubmit), an HMAC-signed
+  hidden form token carrying `(session, question, issued-at)` (kills stale and
+  cross-question replay, needs no server state), and closing questions
+  promptly, which is the real defence. A determined student can still stuff the
+  ballot. This is a lecture, not an election.
+- **No per-IP rate limiting**, or only an extremely generous one. A lecture
+  theatre is behind one NAT; a naive per-IP limit locks out the whole room.
+- **"Which questions have I answered?" is browser-local only** — a
+  `localStorage` flag per question, never sent to the server. It is a boolean
+  in the student's own browser, not a pseudonym, so it cannot be joined to
+  anything.
+- **Analytics are bounded.** Available: per-question distributions, response
+  timing, drop-off across a lecture, cohort-vs-cohort comparison of the same
+  quiz. Permanently unavailable: individual trajectories, per-student
+  participation, "did students who missed Q1 also miss Q4". Changing this is a
+  schema migration *and* a new promise to students.
+
+### Free-text answers are moderated before display
+
+Anonymous free text projected on a lecture screen needs an approval step.
+Text responses default to hidden; the presenter promotes each one into the
+embed. Choice/multi/scale auto-project safely because the answer space is
+closed.
+
+### The presenter opens and closes questions
+
+Hybrid pacing: the presenter opens and closes individual questions, and the
+student page shows whatever is currently open, refreshing every few seconds.
+Same implementation as strict one-at-a-time pacing, but it also supports "here
+are three questions, take five minutes", and it degrades sanely if a question
+is left open.
+
+### Data is ephemeral; there is no database
+
+Responses that are not pulled shortly after the lecture are expected to be
+lost. That permits:
+
+- **No volume, no SQLite, and no migrations.** The schema can be reshaped
+  freely and redeployed.
+- Live state is an in-memory value behind a `TVar`; STM handles concurrent
+  increments.
+- Every response is also appended to a JSONL file. **The storage format is the
+  export format** — `quizctl pull` downloads the file, and JSONL drops straight
+  into jq, pandas, or R.
+
+The log is not for archival durability. Its job is to survive an auto-stop
+*within* a lecture: Fly retains a machine's rootfs across stop/start, so
+replaying the log on wake restores the session transparently. Pure in-memory
+state would vanish if the machine idled out during twenty minutes of non-quiz
+slides.
+
+The rootfs does not survive `fly deploy`. Restating the rule: **do not deploy
+during a lecture.**
+
+**Ephemerality does not permit more than one instance.** State is
+machine-local either way, so two machines would serve two different tallies to
+two halves of the room. Exactly one machine, `strategy = "immediate"`, no
+autoscaling. The constraint was never the disk — it is state locality.
+
+### Quiz and session are distinct
+
+A *quiz* is the authored artifact; a *session* is one delivery of it to one
+cohort. The same lecture runs in 2026 and 2027 and the responses must not
+mingle.
+
+**Exactly one active session server-wide.** Activating a session deactivates
+any other. Embed URLs carry the quiz slug and question key but no session id,
+which is the simplification that lets slides be authored once and run for
+years.
+
+Consequences of global rather than per-quiz scope:
+
+- **An embed whose slug is not the active session's must render a visible "not
+  live" panel** — never a blank space, and never the active session's numbers
+  under the wrong slide. If the wrong deck is projected, the room should see
+  "not live" and say so. Note that since slide embeds are unstyled (below),
+  that warning is carried by the words alone, not by anything alarming to look
+  at.
+- Two quizzes cannot be live at once, so back-to-back units need an explicit
+  activation between them. The "not live" panel is what makes forgetting
+  survivable.
+- Sessions are kept in memory as `Map SessionId SessionState` with a single
+  `active :: Maybe SessionId`. Deactivating never discards anything, so
+  re-activating an earlier session for a make-up class restores its tallies.
+  A lecture's worth of responses is small enough that retaining all of them
+  costs nothing.
+
+### Student pages are styled; slide embeds are not
+
+Two audiences, opposite needs, so two stylesheets and no shared layout beyond
+the document shell.
+
+**Student pages get proper styling.** Students meet them on their own phone or
+laptop, in a dark room, in a hurry. Large tap targets with the whole row as the
+label, an obvious selected state, visible focus rings for keyboard users, and a
+readable measure.
+
+**Slide embeds set no fonts, sizes, or colours**, and inherit from whatever
+deck they are dropped into — an embed should not argue with the slide around
+it. The only CSS is the geometry that makes a bar a bar, plus the tint marking
+a revealed correct answer.
+
+The consequence to accept: embeds render at whatever size the surrounding
+iframe implies, which is a laptop-reading size rather than a projection size.
+If that turns out too small in a real theatre, size it from the deck rather
+than by reintroducing `vw` units here, which scale to the iframe's width rather
+than the screen's and so shrink in a half-width slide.
+
+Presenter pages are styled too, but for a different reason: information density
+on a lectern laptop.
+
+### Option keys, never indices
+
+Responses record the option *key* from the YAML. Options can then be reordered
+or reworded without silently corrupting last year's data.
+
+### YAML is the source of truth
+
+Nothing is ever edited server-side. `push` is idempotent. Quiz definitions live
+in memory on the server, having arrived by push — consistent with the fact that
+they are ephemeral too, and re-pushing is part of the pre-lecture ritual
+anyway.
+
+### Parse permissively, validate strictly
+
+`Quiz.Parse` accepts anything structurally well-formed. `Quiz.Validate` reports
+every semantic problem at once — duplicate keys, correct answers that are not
+options, out-of-range scale labels — so one `quizctl validate` run surfaces all
+of them rather than the first.
+
+FromJSON instances are hand-written, not derived: aeson's generic sum encoding
+produces YAML no human wants to author, and hand-rolling lets errors name the
+offending question.
+
+## Question types (v1)
+
+| YAML `type:` | Meaning |
+| --- | --- |
+| `choice` | Single answer, optional `correct:` |
+| `multi` | Checkboxes, optional `select: 1..3` and `correct: [...]` |
+| `text` | Free text, `max_length:`, always moderated |
+| `scale` | Likert, `range: 1..5`, optional integer-keyed `labels:` |
+
+## Routes
+
+| Group | Auth | Routes |
+| --- | --- | --- |
+| Student (HTML) | none | `GET /s/:code`, `GET/POST /s/:code/:qkey`, `GET /s/:code/:qkey/done` |
+| Embed (HTML, for slides) | none | `GET /embed/:slug/join`, `GET /embed/:slug/:qkey` |
+| Presenter (HTML) | secret URL | `GET /p/:secret`, `POST /p/:secret/{open,close,reveal}/:qkey`, `POST /p/:secret/text/:id/{show,hide}`, `POST /p/:secret/activate` |
+| Admin (JSON) | bearer token | `PUT /api/quiz`, `POST /api/session`, `POST /api/session/:id/activate`, `GET /api/session/:id/responses` |
+
+The presenter URL is a secret, so it must never appear on the projector. The
+presenter page should say so.
+
+Presenter controls use post-redirect-get, since the page also auto-refreshes.
+
+## Operating model
+
+Semester-long app with auto-stop enabled (~$0.30/month; always-on is ~$3.50).
+The cold start is absorbed by a command that runs anyway:
+
+```bash
+# before the lecture — also wakes the machine, and prints the join code
+fly status                        # confirm exactly one machine
+quizctl push examples/ethics-week3.yaml && quizctl session ethics-week3 --label "2026 S2 W3"
+
+# after the lecture
+quizctl pull > week3-responses.jsonl
+```
+
+At the end of semester, `fly scale count 0` or destroy the app.
+
+## Toolchain
+
+- **stack**, `snapshot: lts-24.12` (GHC 9.10.3, matching the local toolchain).
+  Chosen over cabal because Stackage snapshots give a co-tested dependency set
+  for free, and because hpack's module globbing keeps the Docker dependency
+  layer stable when modules are added — with a hand-written `.cabal`, adding a
+  module invalidates it and costs a full dependency rebuild.
+- `lucid` (not `lucid2`) for HTML, because `servant-lucid` targets `lucid` and
+  both packages export a module named `Lucid`.
+- `ReaderT Env Handler` via `hoistServer`. No effect system.
+- Deployment: multi-stage Dockerfile → GHCR via GitHub Actions with a
+  **registry-backed** layer cache (not `type=gha`, whose entries expire after 7
+  days of inactivity — precisely a lecture-app cadence) → `fly deploy --image`.
+
+Measured on the full dependency set (arm64, local):
+
+| Layer | Time |
+| --- | --- |
+| `stack build --only-dependencies` | **1070s (~18 min)** |
+| `stack install` (application code) | **9.8s** |
+| Final image | 246MB |
+
+That 100:1 ratio is the entire justification for the two-stage split, and for
+insisting on a cache that does not expire. An 18-minute cold build is not
+something to discover twenty minutes before a lecture.
+
+## Footguns already paid for
+
+Keep these; they were found the hard way.
+
+- **Locale encoding.** GHC derives its default encoding from the locale, so a
+  container with no `LANG` gets ASCII and dies with `commitBuffer: invalid
+  argument` on the first em dash. Quiz titles, prompts, and student free-text
+  answers are full of dashes, curly quotes, and emoji, so this would have
+  crashed the response handler mid-lecture, not merely garbled a CLI message.
+  Fixed twice over: `Quiz.Encoding.forceUtf8` must be the first action in every
+  `main`, and the image sets `LANG=C.UTF-8`.
+  **A container run is the only thing that catches this** — a Mac shell has a
+  UTF-8 locale, so tests and local runs pass regardless.
+- **Never hold the response log open.** GHC locks files per process, so a
+  `Handle` kept open in `AppendMode` makes `readFile` on the same path throw
+  `resource busy` — which silently breaks `GET /api/log`, and therefore
+  `quizctl pull`, the one operation that must never fail. The store reopens the
+  file for each append instead; at a few hundred writes per lecture the cost is
+  irrelevant. There is a regression test for this.
+- **`stack -j` needs an argument**, unlike cabal's bare `-j`. Stack already
+  parallelises across cores, so just omit it.
+- **Servant parses the request body before the handler runs**, so a bad body on
+  an authenticated route returns 400 rather than 401. Not a hole — the handler
+  still enforces auth — but do not read a 400 as "the token was accepted".
+- **Lucid's `Term` class needs monomorphic helpers.** `where`-bound HTML
+  fragments without type signatures fail to typecheck with an ambiguous `m`.
+  Give them `:: ... -> Html ()`.
+- **Local Docker layer caching is not reliable on this machine.** BuildKit
+  holds pulled base layers in the build cache rather than as tagged images, and
+  OrbStack evicts them; a 1.4GB base plus a ~1GB snapshot store exceeds its
+  budget. When the `FROM` layer is evicted and re-pulled, everything beneath it
+  invalidates no matter what the content hashes say, so a local rebuild can
+  cost the full ~6 minutes.
+  Mitigations if local iteration on the Dockerfile ever gets painful:
+  `docker pull haskell:9.10.3-bookworm` to hold the base as a tagged image
+  (tagged images are not pruned as build cache), and raise OrbStack's cache
+  limit. **This does not affect CI**, which imports an explicit
+  registry-backed cache from GHCR onto a fresh runner.
+
+## Deploying
+
+The app is `quiz-servant` in `syd`, giving `https://quiz-servant.fly.dev`.
+
+**The app name appears in three places** and they must agree, or the join slide
+will print a URL that goes nowhere: `app` in `fly.toml`, `QUIZ_BASE_URL` in
+`fly.toml`, and the image tag in `.github/workflows/deploy.yml`. If
+`quiz-servant` turns out to be taken globally, change all three.
+
+First time:
+
+```bash
+brew install flyctl
+fly auth login
+fly apps create quiz-servant
+
+# Write the token locally FIRST, then push that same value to Fly. Fly secrets
+# are write-only: generating one inline loses it forever.
+mkdir -p ~/.config/quizctl
+openssl rand -hex 24 > ~/.config/quizctl/token
+chmod 600 ~/.config/quizctl/token
+fly secrets set QUIZ_ADMIN_TOKEN="$(cat ~/.config/quizctl/token)"
+
+fly deploy --remote-only          # ~18 min the first time; minutes after
+fly scale count 1                 # NOT optional — see below
+fly status                        # must list exactly one machine
+```
+
+`--remote-only` builds on Fly's own builder, which is amd64 — never build the
+deployment image on an arm Mac.
+
+Then point the CLI at it:
+
+```bash
+mkdir -p ~/.config/quizctl
+echo "https://quiz-servant.fly.dev" > ~/.config/quizctl/url
+fly secrets list                  # to confirm; the value itself is write-only
+echo "<the admin token>" > ~/.config/quizctl/token
+chmod 600 ~/.config/quizctl/token
+```
+
+Subsequent deploys are `fly deploy --remote-only`. The GitHub Actions workflow
+is written but **has never run** — there is no remote for this repo yet. Use it
+only after it has gone green once, and never for the first deploy.
+
+### Costs
+
+Roughly **$0.30/month** with auto-stop, since compute is billed per second and
+a few teaching hours a week is a few cents. Always-on would be ~$3.50. There is
+no volume, so no storage line beyond the stopped-machine rootfs.
+
+### The two rules that matter
+
+**Exactly one machine, always.** `fly deploy` provisions two by default for HA.
+Since state is machine-local, two machines split the room: half the students
+answer into a world the projector is not showing, and the tallies are simply
+wrong with nothing visibly broken. This bit on the first deploy and is the
+failure mode most likely to go unnoticed in a real lecture. After any deploy or
+scaling operation:
+
+```bash
+fly scale count 1 && fly status    # exactly one machine
+```
+
+Worth adding to the pre-lecture ritual, since nothing in the app can detect it
+— `quizctl status` talks to whichever machine answers and looks perfectly
+healthy either way.
+
+**Never `fly deploy` during a lecture.** A deploy replaces the machine, and the
+response log lives on the rootfs. Stop/start preserves it; deploy does not.
+
+## Build order
+
+1. ~~`quizctl validate` — YAML → model → static HTML. No server.~~ **done**
+2. ~~Local server end to end: student form, submit, results embed.~~ **done** —
+   driven so far by `curl` against the JSON admin API. Still worth testing from
+   a real phone over the LAN.
+3. ~~Presenter page at `/p/<secret>`: open/close/reveal, text moderation, and
+   reactivation of a superseded session.~~ **done**
+4. ~~`quizctl push` / `session` / `open` / `close` / `reveal` / `status` /
+   `pull` via `servant-client`, reusing the `API` type.~~ **done** — server
+   location and token come from `QUIZ_URL`/`QUIZ_TOKEN` or files under
+   `~/.config/quizctl/`.
+5. Fly deploy + GitHub Actions, then a full rehearsal on a second device.
+   **← current**
+
+Not yet built, and needed before a real lecture: the QR/join embed carries a
+bare `/s` rather than a real hostname (fix alongside deployment, when the
+hostname exists), and a real-phone-over-LAN pass on the student flow.
+
+Prove the Docker build locally before wiring CI — debugging a Haskell build
+inside CI is miserable.
+
+## Deliberately out of scope
+
+Accounts, multiple presenters, images in questions, timers, leaderboards, word
+clouds, editing quizzes in a browser, and any analytics beyond export.

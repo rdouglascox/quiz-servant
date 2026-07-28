@@ -1,0 +1,17 @@
+snapshot: lts-24.12 # GHC 9.10.3
+
+packages:
+  - .
+
+extra-deps: []
+# Off-snapshot packages go here, pinned to a Hackage version. Their own
+# off-snapshot dependencies must be pinned here too. The QR-code libraries
+# are the likely candidates when we get to the join page.
+
+# The local toolchain is GHC 9.10.3, matching this snapshot exactly, so there
+# is no reason to let stack download a second copy. The Dockerfile passes
+# --system-ghc for the same reason.
+system-ghc: true
+
+# Nix is on this machine's PATH but Stack's Nix integration is not in use.
+notify-if-nix-on-path: false

@@ -1,0 +1,99 @@
+name: quiz-servant
+version: 0.1.0.0
+synopsis: Minimal lecture quiz server and CLI
+description: >
+  A deliberately small alternative to Mentimeter. Quizzes are authored locally
+  as YAML, pushed to the server with a CLI, and answered by students on a plain
+  HTML page. See DESIGN.md.
+author: Ryan
+maintainer: ryandouglascox84@gmail.com
+license: BSD-3-Clause
+
+extra-source-files:
+  - DESIGN.md
+
+language: GHC2021
+
+default-extensions:
+  # DataKinds and TypeFamilies are for servant's type-level API descriptions;
+  # GHC2021 covers TypeOperators but not these.
+  - DataKinds
+  - DerivingStrategies
+  - LambdaCase
+  - OverloadedStrings
+  - RecordWildCards
+  - TypeFamilies
+
+ghc-options:
+  - -Wall
+  - -Wcompat
+  - -Wincomplete-record-updates
+  - -Wincomplete-uni-patterns
+  - -Wredundant-constraints
+
+dependencies:
+  - base >= 4.18 && < 5
+  - aeson
+  - bytestring
+  - containers
+  - text
+  - yaml
+
+library:
+  source-dirs: src
+  dependencies:
+    - crypton
+    - directory
+    - filepath
+    - http-api-data
+    - lucid
+    - memory
+    - mtl
+    - servant
+    - servant-client
+    - servant-lucid
+    - servant-server
+    - stm
+    - time
+    - wai
+    - warp
+
+executables:
+  quiz-servant:
+    main: Main.hs
+    source-dirs: app/server
+    ghc-options:
+      - -threaded
+      - -rtsopts
+      - -with-rtsopts=-N
+    dependencies:
+      - quiz-servant
+      - wai-extra
+      - warp
+
+  quizctl:
+    main: Main.hs
+    source-dirs: app/quizctl
+    ghc-options:
+      - -threaded
+      - -rtsopts
+      - -with-rtsopts=-N
+    dependencies:
+      - quiz-servant
+      - directory
+      - filepath
+      - http-client-tls
+      - http-types
+      - optparse-applicative
+      - servant-client
+
+tests:
+  spec:
+    main: Spec.hs
+    source-dirs: test
+    dependencies:
+      - quiz-servant
+      - filepath
+      - hspec
+      - temporary
+      - time

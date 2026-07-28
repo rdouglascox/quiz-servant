@@ -1,0 +1,49 @@
+app = "quiz-servant"
+primary_region = "syd"
+
+[build]
+
+[env]
+  PORT = "8080"
+  # Rootfs, not a volume. Survives stop/start — which is what makes auto-stop
+  # safe mid-lecture — but not a deploy. See DESIGN.md.
+  QUIZ_LOG = "/data/responses.jsonl"
+  QUIZ_BASE_URL = "https://quiz-servant.fly.dev"
+
+# QUIZ_ADMIN_TOKEN is a secret:
+#   fly secrets set QUIZ_ADMIN_TOKEN="$(openssl rand -hex 24)"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Scale to zero between lectures: compute is billed per second, so a few
+  # hours a week costs cents. The pre-lecture `quizctl push` wakes the machine,
+  # so no student ever meets a cold start.
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "requests"
+    # One machine serves the whole room. A lecture theatre polling every few
+    # seconds is a few hundred tiny requests per second at most.
+    hard_limit = 400
+    soft_limit = 350
+
+[deploy]
+  # A rolling deploy would briefly run two machines; this replaces in place.
+  #
+  # WARNING: this does NOT cap the machine count, and there is no fly.toml key
+  # that does. `fly deploy` provisions TWO machines by default for HA, which
+  # silently splits the room in half — each machine has its own in-memory state
+  # and its own log, so half the students answer into a world the projector is
+  # not showing. This happened on the very first deploy.
+  #
+  # Enforce it out of band, and re-check after anything that touches machines:
+  #   fly scale count 1
+  #   fly status          # must list exactly one machine
+  strategy = "immediate"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
