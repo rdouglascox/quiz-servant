@@ -11,3 +11,6 @@ quiz-servant.cabal
 
 # Built from slides/*.md with pandoc.
 slides/*.html
+
+# macOS
+.DS_Store
