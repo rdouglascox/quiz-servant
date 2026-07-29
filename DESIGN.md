@@ -134,19 +134,62 @@ laptop, in a dark room, in a hurry. Large tap targets with the whole row as the
 label, an obvious selected state, visible focus rings for keyboard users, and a
 readable measure.
 
-**Slide embeds set no fonts, sizes, or colours**, and inherit from whatever
-deck they are dropped into — an embed should not argue with the slide around
-it. The only CSS is the geometry that makes a bar a bar, plus the tint marking
-a revealed correct answer.
-
-The consequence to accept: embeds render at whatever size the surrounding
-iframe implies, which is a laptop-reading size rather than a projection size.
-If that turns out too small in a real theatre, size it from the deck rather
-than by reintroducing `vw` units here, which scale to the iframe's width rather
-than the screen's and so shrink in a half-width slide.
+**Slide embeds set no fonts, sizes, or colours.** The deck owns presentation
+entirely; the server sends structure and numbers.
 
 Presenter pages are styled too, but for a different reason: information density
 on a lectern laptop.
+
+### Decks fetch a fragment; they do not frame one
+
+`GET /embed/:slug/:question/frag` returns bare `<tr>` rows — no document, no
+styles. The deck owns a `<table data-quiz="…">` and a small script swaps the
+rows in. `tools/quiz-embed.html` is that script, included with
+`--include-after-body`.
+
+This replaced an iframe, which turned out to be **functionally broken** against
+minpressive, the deck framework in use:
+
+- **It defeats the reveal engine.** minpressive hides un-revealed blocks with
+  `color: rgba(0,0,0,0)`. Inheritance stops at a document boundary, so a framed
+  panel stays lit while everything around it is blank — results on screen
+  before you reach them. Injected rows inherit the colour and reveal correctly.
+- **It ignores the deck's scale.** `html { font-size: clamp(20px, 2.3vw, 40px) }`
+  with everything else in em/rem. A framed document restarts at 16px, so on a
+  projector the panel is a quarter the size of the text beside it.
+- **Fixed heights in a fluid layout**, and a full-document reload every refresh.
+
+The whole-document form at `/embed/:slug/:question` is kept for contexts that
+accept nothing else — an LMS embed, say.
+
+Three details that are load-bearing rather than cosmetic:
+
+- **The container is a `<table>`.** It is both in minpressive's transparent-ink
+  selector and in its `STEP_TAGS`, so it participates in the reveal. `<figure>`
+  is in `STEP_TAGS` but *not* the colour selector, so its contents would leak
+  early; nesting the two makes one panel consume two clicks.
+- **The placeholder row must be there.** minpressive computes its steps once at
+  load and rejects zero-size elements, so an empty container never becomes a
+  step and never reveals. It is also the no-JS fallback.
+- **Bars are painted in `currentColor`**, mixed toward transparent. A literal
+  colour would be visible before its step; `currentColor` is transparent until
+  revealed and then inherits the deck's ink, so it works in light and dark
+  without knowing which it is.
+
+`join` is a reserved question key — the join panel occupies that path.
+`Quiz.Validate` rejects it rather than letting it silently shadow.
+
+### Cross-origin
+
+The `/embed` endpoints send `Access-Control-Allow-Origin: *` so a deck hosted
+anywhere can read them. Scoped to `/embed`: those responses are already public
+and unauthenticated, so letting a script read what a person could read anyway
+grants nothing. The admin API gets no such header.
+
+Whether this survives a locked-down lecture machine is a question about that
+environment, not one to reason about — `tools/embed-check.html` tests
+reachability, CORS, framing, and CSP and reports which techniques work. Run it
+on the lectern before relying on any of this.
 
 ### Option keys, never indices
 

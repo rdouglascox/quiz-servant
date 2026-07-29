@@ -1,0 +1,121 @@
+<!--
+  quiz-servant · deck-side embed
+
+  Include once per deck, after the body:
+
+      pandoc talk.md --template=minpressive_basic.html \
+             --include-after-body=tools/quiz-embed.html \
+             -o talk.html
+
+  Point it at your server and quiz in the deck's metadata block:
+
+      ---
+      title: "Week 3 — Consequentialism"
+      header-includes: |
+        <meta name="quiz-base" content="https://quiz-servant.fly.dev">
+        <meta name="quiz-slug" content="ethics-week3">
+      ---
+
+  Then drop a panel wherever you want results, using the question's key from
+  the YAML. The placeholder row matters: it is what shows before the first
+  fetch, what shows if JavaScript never runs, and — in minpressive — what gives
+  the table enough height to be recognised as a step at all.
+
+      <table data-quiz="trolley"><tbody>
+        <tr><td>Waiting for responses…</td></tr>
+      </tbody></table>
+
+  Nothing here is required. The server sends structure and numbers; the styling
+  below is a starting point to edit or delete.
+-->
+
+<style>
+  /* The bar is drawn on the option cell from the --pct the server sets.
+
+     currentColor is doing something specific here. minpressive hides an
+     un-revealed block by setting `color: rgba(0,0,0,0)`, so a bar painted in
+     currentColor is invisible until its step is revealed, then fades in with
+     the rest of the block. Painting it in a literal colour would leave the
+     results visible on screen before you reached them, spoiling the build.
+
+     Mixing toward transparent keeps the label readable over the fill, and
+     inherits whatever ink the deck uses — so this works in light and dark
+     without knowing which it is. */
+  /* Full measure, or the bars are squeezed into a shrink-to-fit table. */
+  [data-quiz] { width: 100%; }
+
+  [data-quiz] .quiz-option {
+    background-image: linear-gradient(to right,
+      color-mix(in srgb, currentColor 18%, transparent) 0 calc(var(--pct, 0) * 1%),
+      transparent 0);
+    background-repeat: no-repeat;
+    padding-right: 1em;
+    /* Take all the space the count column does not, so a bar's length is a
+       share of the full measure rather than of however wide the longest
+       option happens to be. */
+    width: 100%;
+  }
+
+  [data-quiz] .quiz-count { text-align: right; font-variant-numeric: tabular-nums; }
+  [data-quiz] .quiz-meta  { font-size: .8em; opacity: .7; }
+  [data-quiz] .is-correct .quiz-option { font-weight: 700; }
+  [data-quiz] .quiz-text  { font-style: italic; }
+</style>
+
+<script>
+'use strict';
+
+// Deferred scripts — including minpressive's runtime — have all executed by
+// the time DOMContentLoaded fires, so the reveal classes we look for below
+// already exist. Running earlier would see a page that has not been wired up.
+document.addEventListener('DOMContentLoaded', function () {
+
+  function meta(name) {
+    var el = document.querySelector('meta[name="' + name + '"]');
+    return el ? el.content.trim() : '';
+  }
+
+  var base = meta('quiz-base').replace(/\/+$/, '');
+  var slug = meta('quiz-slug');
+  var every = parseInt(meta('quiz-interval') || '2000', 10);
+  if (!base || !slug) return;          // not a quiz deck; leave placeholders alone
+
+  document.querySelectorAll('[data-quiz]').forEach(function (panel) {
+    var question = panel.getAttribute('data-quiz');
+    // Rows replace a <tbody>, not the <table>: replacing the table's own
+    // innerHTML would work, but the element must survive untouched because
+    // minpressive captured it as a step at load time.
+    var target = panel.tBodies && panel.tBodies.length ? panel.tBodies[0] : panel;
+    var url = base + '/embed/' + encodeURIComponent(slug)
+                   + '/' + encodeURIComponent(question) + '/frag';
+    var timer = null;
+
+    function refresh() {
+      fetch(url, { cache: 'no-store' })
+        .then(function (r) { return r.ok ? r.text() : null; })
+        .then(function (html) {
+          // Only touch the DOM when something changed, so bars are not
+          // rebuilt — and CSS transitions not restarted — twice a second.
+          if (html !== null && html !== target.innerHTML) target.innerHTML = html;
+        })
+        .catch(function () { /* a dropped poll is not worth reporting mid-lecture */ });
+    }
+
+    function start() { if (!timer) { refresh(); timer = setInterval(refresh, every); } }
+    function stop()  { if (timer) { clearInterval(timer); timer = null; } }
+
+    // In a reveal-based deck, poll only while the panel is actually revealed:
+    // no traffic until you reach the question, and none once you have moved
+    // past it. In an ordinary page there is nothing to wait for, so poll from
+    // the start.
+    if (document.querySelector('.highlightable')) {
+      new MutationObserver(function () {
+        panel.classList.contains('highlight') ? start() : stop();
+      }).observe(panel, { attributes: true, attributeFilter: ['class'] });
+      if (panel.classList.contains('highlight')) start();
+    } else {
+      start();
+    }
+  });
+});
+</script>

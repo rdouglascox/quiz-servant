@@ -195,7 +195,17 @@ doneH code qkeyRaw mChosen = withSession code render (pure studentNoSession)
 -- Embed ---------------------------------------------------------------------
 
 embedRoutes :: Text -> ServerT EmbedSub AppM
-embedRoutes slug = joinH slug :<|> resultsH slug
+embedRoutes slug = joinH slug :<|> joinFragH slug :<|> fragH slug :<|> resultsH slug
+
+joinFragH :: Text -> AppM (Html ())
+joinFragH slug = do
+  world <- liftIO . readWorld =<< asks envStore
+  base <- asks envBaseUrl
+  pure $ case activeState world of
+    Just st
+      | unQuizSlug (sessionQuizSlug (stateSession st)) == slug ->
+          joinFragment base (sessionCode (stateSession st))
+    _ -> fragmentNotLive
 
 -- | Both embeds resolve the active session themselves, and both must be loud
 -- when the slide's quiz is not the one that is live.
@@ -210,6 +220,22 @@ joinH :: Text -> AppM (Html ())
 joinH slug = withActiveQuiz slug $ \st -> do
   base <- asks envBaseUrl
   pure (embedJoin base (Just (stateQuiz st, sessionCode (stateSession st))))
+
+-- | Bare rows for a deck to inject. Deliberately answers 200 with a "not live"
+-- row rather than 404: the deck polls this every couple of seconds, and a
+-- stream of console errors during a lecture helps nobody.
+fragH :: Text -> Text -> AppM (Html ())
+fragH slug qkeyRaw = do
+  world <- liftIO . readWorld =<< asks envStore
+  pure $ case activeState world of
+    Just st
+      | unQuizSlug (sessionQuizSlug (stateSession st)) == slug
+      , Just question <- findQuestion (QuestionKey qkeyRaw) st ->
+          embedFragment
+            question
+            (phaseOf (QuestionKey qkeyRaw) st)
+            (tallyFor question (responsesFor (QuestionKey qkeyRaw) st))
+    _ -> fragmentNotLive
 
 resultsH :: Text -> Text -> AppM (Html ())
 resultsH slug qkeyRaw = withActiveQuiz slug $ \st ->

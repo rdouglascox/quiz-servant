@@ -44,6 +44,9 @@ validateQuestion Question{..} =
     , [ Problem context ("key must match [a-z0-9-]+, got " <> tshow (unQuestionKey questionKey))
       | not (validKey (unQuestionKey questionKey))
       ]
+    , [ Problem context "'join' is reserved — the join panel uses that path"
+      | unQuestionKey questionKey == "join"
+      ]
     , bodyProblems
     ]
   where

@@ -16,6 +16,9 @@ module Quiz.Server.Html
   , embedJoin
   , embedResults
   , embedNotLive
+  , embedFragment
+  , fragmentNotLive
+  , joinFragment
   , presenterPage
   ) where
 
@@ -232,6 +235,81 @@ correctKeys question = case questionBody question of
 percent :: Int -> Int -> Int
 percent _ 0 = 0
 percent n total = (n * 100) `div` total
+
+-- Fragment (injected into a deck) -------------------------------------------
+
+-- | Table rows, and nothing else — no document, no styles, no wrapper.
+--
+-- The deck owns the surrounding @<table data-quiz="…">@ and all of the
+-- presentation. We emit structure and numbers: the option text, the count, and
+-- the share as a @--pct@ custom property, leaving the deck to decide whether
+-- that is a bar, a column, or nothing at all.
+--
+-- Rows rather than a @<div>@ because of how minpressive reveals content: it
+-- hides un-revealed blocks with @color: rgba(0,0,0,0)@, and @<table>@ is both
+-- in that selector and in its list of step elements, so a table participates in
+-- the reveal automatically while a @<div>@ would sit there visible.
+embedFragment :: Question -> Phase -> Tally -> Html ()
+embedFragment question phase tally = do
+  tr_ [class_ "quiz-meta"] $
+    td_ [colspan_ "2"] $ do
+      toHtml (tshow total <> " response" <> (if total == 1 then "" else "s"))
+      toHtml (" · " <> phaseWord phase)
+  case tally of
+    TallyOptions rows _ -> mapM_ optionRow rows
+    TallyScale rows _ -> mapM_ scaleRow rows
+    TallyTexts rows _ ->
+      case [t | (_, t, True) <- rows] of
+        [] -> pure ()
+        shown -> mapM_ textRow shown
+  where
+    total = case tally of
+      TallyOptions _ n -> n
+      TallyScale _ n -> n
+      TallyTexts _ n -> n
+
+    optionRow :: (Option, Int) -> Html ()
+    optionRow (option, n) =
+      row
+        (phase == Revealed && optionKey option `elem` correctKeys question)
+        (optionText option)
+        n
+
+    scaleRow :: (Int, Int) -> Html ()
+    scaleRow (point, n) = row False (tshow point) n
+
+    row :: Bool -> Text -> Int -> Html ()
+    row correct label n =
+      tr_
+        [ class_ (if correct then "quiz-row is-correct" else "quiz-row")
+        , style_ ("--pct:" <> tshow (percent n total))
+        ]
+        $ do
+          td_ [class_ "quiz-option"] (toHtml label)
+          td_ [class_ "quiz-count"] (toHtml (tshow n))
+
+    textRow :: Text -> Html ()
+    textRow t = tr_ [class_ "quiz-text"] (td_ [colspan_ "2"] (toHtml t))
+
+-- | Shown when the slide's quiz is not the one that is live. Same reasoning as
+-- 'embedNotLive', in row form.
+fragmentNotLive :: Html ()
+fragmentNotLive =
+  tr_ [class_ "quiz-notlive"] (td_ [colspan_ "2"] "Not live")
+
+-- | The join address, in row form, for a deck that wants it inline rather than
+-- framed.
+joinFragment :: Text -> JoinCode -> Html ()
+joinFragment base code = do
+  tr_ [class_ "quiz-meta"] (td_ [colspan_ "2"] "Join at")
+  tr_ [class_ "quiz-join"] (td_ [colspan_ "2"] (toHtml (joinUrl base code)))
+
+phaseWord :: Phase -> Text
+phaseWord = \case
+  Live -> "open"
+  Pending -> "not open yet"
+  Closed -> "closed"
+  Revealed -> "answers shown"
 
 -- Presenter -----------------------------------------------------------------
 

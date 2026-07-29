@@ -67,8 +67,18 @@ type StudentSub =
 -- @join@ precedes the question capture so the literal wins.
 type EmbedAPI = "embed" :> Capture "slug" Text :> EmbedSub
 
+-- | @/frag@ returns bare rows rather than a document, for a deck to fetch and
+-- inject into markup it owns. That is the seamless path: injected content
+-- inherits the deck's colour, scale, and theme, which nothing inside an iframe
+-- ever can. The whole-document form is kept for contexts that only accept an
+-- iframe embed.
+-- @join@ and its fragment precede the question capture so the literals win.
+-- \"join\" is therefore not usable as a question key, which "Quiz.Validate"
+-- rejects rather than letting it silently shadow.
 type EmbedSub =
   "join" :> Get '[HTML] (Html ())
+    :<|> "join" :> "frag" :> Get '[HTML] (Html ())
+    :<|> Capture "question" Text :> "frag" :> Get '[HTML] (Html ())
     :<|> Capture "question" Text :> Get '[HTML] (Html ())
 
 -- | The lectern controls. The unguessable secret in the path is the whole of
