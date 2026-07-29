@@ -11,7 +11,9 @@ import Control.Monad (unless)
 import Control.Monad.Reader
 import Data.Aeson (Value, object, toJSON, (.=))
 import Data.ByteString.Lazy qualified as BL
-import Data.List (find)
+import Data.List (find, sortOn)
+import Data.Map.Strict qualified as Map
+import Data.Ord (Down (..))
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
@@ -301,7 +303,7 @@ presenterRoutes secret =
 
 adminRoutes :: ServerT AdminAPI AppM
 adminRoutes =
-  pushH :<|> newSessionH :<|> phaseH :<|> stateH :<|> logH
+  pushH :<|> newSessionH :<|> phaseH :<|> stateH :<|> sessionsH :<|> logH
 
 requireAuth :: Maybe Text -> AppM ()
 requireAuth given = do
@@ -387,6 +389,29 @@ stateH auth = do
                  | q <- quizQuestions (stateQuiz st)
                  ]
           ]
+
+-- | Every session, newest first, each with the presenter secret needed to
+-- reach its controls again.
+sessionsH :: Maybe Text -> AppM Value
+sessionsH auth = do
+  requireAuth auth
+  world <- liftIO . readWorld =<< asks envStore
+  base <- asks envBaseUrl
+  let newestFirst =
+        sortOn (Down . sessionCreatedAt . stateSession) (Map.elems (worldSessions world))
+      describe st =
+        let s = stateSession st
+         in object
+              [ "id" .= unSessionId (sessionId s)
+              , "code" .= unJoinCode (sessionCode s)
+              , "secret" .= unSecret (sessionSecret s)
+              , "quiz" .= unQuizSlug (sessionQuizSlug s)
+              , "label" .= sessionLabel s
+              , "created_at" .= sessionCreatedAt s
+              , "active" .= (worldActive world == Just (sessionId s))
+              , "responses" .= length (stateResponses st)
+              ]
+  pure $ object ["base_url" .= base, "sessions" .= map describe newestFirst]
 
 -- | The response log, verbatim. The storage format is the export format, so
 -- there is nothing to serialise here.

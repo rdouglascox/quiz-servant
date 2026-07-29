@@ -21,6 +21,7 @@ data Admin = Admin
   , callNewSession :: NewSession -> ClientM Value
   , callPhase :: PhaseChange -> ClientM Value
   , callState :: ClientM Value
+  , callSessions :: ClientM Value
   , callLog :: ClientM Text
   }
 
@@ -31,9 +32,10 @@ admin token =
     , callNewSession = newSession bearer
     , callPhase = phase bearer
     , callState = state bearer
+    , callSessions = sessions bearer
     , callLog = logC bearer
     }
   where
     bearer = Just ("Bearer " <> token)
-    push :<|> newSession :<|> phase :<|> state :<|> logC =
+    push :<|> newSession :<|> phase :<|> state :<|> sessions :<|> logC =
       client (Proxy @("api" :> AdminAPI))

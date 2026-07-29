@@ -42,6 +42,7 @@ data Command
   | SessionNew Text Text
   | SetPhase Phase Text
   | Status
+  | Sessions
   | Pull (Maybe FilePath)
 
 data ValidateOpts = ValidateOpts
@@ -107,6 +108,12 @@ commands =
       <> command
         "status"
         (info (pure Status) (progDesc "Show the live session and its questions"))
+      <> command
+        "sessions"
+        ( info
+            (pure Sessions)
+            (progDesc "List every session, with its presenter link")
+        )
       <> command
         "pull"
         ( info
@@ -196,6 +203,22 @@ run = \case
               <> T.justifyLeft 8 ' ' ty
               <> T.justifyLeft 10 ' ' phase
               <> T.pack (show (n :: Int))
+  Sessions -> do
+    (remote, base) <- connect
+    reply <- runRemote base (callSessions remote)
+    case parseMaybe sessionsReply reply of
+      Nothing -> die' "server reply was not a session list" ""
+      Just [] -> putStrLn "no sessions yet — quizctl session <slug> starts one"
+      Just rows -> for_ rows $ \r -> do
+        TIO.putStrLn $
+          (if sessionIsActive r then "* " else "  ")
+            <> T.justifyLeft 7 ' ' (sessionRowCode r)
+            <> T.justifyLeft 24 ' ' (sessionRowQuiz r)
+            <> T.justifyLeft 22 ' ' (sessionRowLabel r)
+            <> T.pack (show (sessionRowResponses r) <> " responses")
+        putStrLn $ "    " <> showBaseUrl base <> "/p/" <> T.unpack (sessionRowSecret r)
+      -- The leading marker is the live session; every line's link still works,
+      -- which is the point of listing them.
   Pull mOut -> do
     (remote, base) <- connect
     contents <- runRemote base (callLog remote)
@@ -269,6 +292,27 @@ stateReply = withObject "state" $ \o -> do
       rows <- for questions . withObject "question" $ \q ->
         (,,,) <$> q .: "key" <*> q .: "type" <*> q .: "phase" <*> q .: "responses"
       pure (session, rows)
+
+data SessionRow = SessionRow
+  { sessionRowCode :: Text
+  , sessionRowQuiz :: Text
+  , sessionRowLabel :: Text
+  , sessionRowSecret :: Text
+  , sessionRowResponses :: Int
+  , sessionIsActive :: Bool
+  }
+
+sessionsReply :: Value -> AT.Parser [SessionRow]
+sessionsReply = withObject "sessions" $ \o -> do
+  rows <- o .: "sessions"
+  for rows . withObject "session" $ \s ->
+    SessionRow
+      <$> s .: "code"
+      <*> s .: "quiz"
+      <*> s .: "label"
+      <*> s .: "secret"
+      <*> s .: "responses"
+      <*> s .: "active"
 
 phaseWord :: Phase -> String
 phaseWord = \case

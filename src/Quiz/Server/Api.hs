@@ -108,6 +108,10 @@ type AdminAPI =
     :<|> "session" :> AuthHeader :> ReqBody '[JSON] NewSession :> Post '[JSON] Value
     :<|> "phase" :> AuthHeader :> ReqBody '[JSON] PhaseChange :> Post '[JSON] Value
     :<|> "state" :> AuthHeader :> Get '[JSON] Value
+    -- Every session, not just the live one: a presenter URL is unguessable by
+    -- design, so without a way to list them an earlier session becomes
+    -- unreachable once another supersedes it.
+    :<|> "sessions" :> AuthHeader :> Get '[JSON] Value
     :<|> "log" :> AuthHeader :> Get '[PlainText] Text
 
 data NewSession = NewSession
