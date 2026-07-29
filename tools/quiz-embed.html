@@ -7,14 +7,18 @@
              --include-after-body=tools/quiz-embed.html \
              -o talk.html
 
-  Point it at your server and quiz in the deck's metadata block:
+  Point it at your server and quiz in the deck's metadata block, with two meta
+  tags — written below without their angle brackets so that a copy of this
+  comment cannot be mistaken for the real configuration:
 
       ---
       title: "Week 3 — Consequentialism"
       header-includes: |
-        <meta name="quiz-base" content="https://quiz-servant.fly.dev">
-        <meta name="quiz-slug" content="ethics-week3">
+        meta name="quiz-base" content="https://quiz-servant.fly.dev"
+        meta name="quiz-slug" content="ethics-week3"
       ---
+
+  (see slides/ethics-week3.md for the real thing)
 
   Then drop a panel wherever you want results, using the question's key from
   the YAML. The placeholder row matters: it is what shows before the first
