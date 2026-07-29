@@ -434,9 +434,13 @@ presenterCss =
     , ".answers button { padding: .25rem .7rem; font-size: .8rem; }"
     ]
 
--- | Slides stay plain on purpose. Whatever the deck does typographically, an
--- embed should sit inside it without arguing, so this sets no fonts, sizes, or
--- colours and inherits from the page it is dropped into.
+-- | Slides stay plain on purpose: this sets no fonts, sizes, or colours, so an
+-- embed does not argue with the deck around it.
+--
+-- Note that an iframe is a separate document and inherits /nothing/ from its
+-- host page. Matching size and theme is therefore the deck's job — see
+-- @slides/ethics-week3.md@, which scales the frame and declares the same
+-- @color-scheme@ so the panels do not come out dark inside a light page.
 --
 -- All that remains is the geometry that turns a @div@ into a bar — without it
 -- the tallies are not a chart at all — and the fill tint, which is the only

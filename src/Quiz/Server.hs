@@ -18,6 +18,7 @@ import Data.Text.Encoding qualified as TE
 import Data.Text.IO qualified as TIO
 import Data.Time (NominalDiffTime, getCurrentTime)
 import Lucid (Html)
+import Network.Wai (Middleware, mapResponseHeaders, pathInfo)
 import Servant
 
 import Quiz.Answer
@@ -42,9 +43,28 @@ type AppM = ReaderT Env Handler
 
 app :: Env -> Application
 app env =
-  serve api (hoistServer api (\a -> runReaderT a env) server)
+  allowEmbedCors $ serve api (hoistServer api (\a -> runReaderT a env) server)
   where
     api = Proxy @API
+
+-- | Let a deck hosted anywhere read the embed endpoints with @fetch@.
+--
+-- Scoped to @/embed@ deliberately: those responses are already public and
+-- unauthenticated — anyone with the URL can open them in a browser — so
+-- allowing a script to read what a person could read anyway grants nothing
+-- new. The admin API is left alone.
+--
+-- No @OPTIONS@ handling is needed: a plain @GET@ with no custom headers is a
+-- CORS \"simple request\" and is never preflighted.
+allowEmbedCors :: Middleware
+allowEmbedCors downstream request respond
+  | isEmbed = downstream request (respond . mapResponseHeaders (header :))
+  | otherwise = downstream request respond
+  where
+    isEmbed = case pathInfo request of
+      ("embed" : _) -> True
+      _ -> False
+    header = ("Access-Control-Allow-Origin", "*")
 
 server :: ServerT API AppM
 server =

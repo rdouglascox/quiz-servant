@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>quiz-servant · embedding check</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body { font: 16px/1.5 system-ui, sans-serif; max-width: 46rem; margin: 0 auto; padding: 2rem 1rem 5rem; }
+  h1 { font-size: 1.4rem; margin: 0 0 .25rem; }
+  h2 { font-size: 1.05rem; margin: 2rem 0 .5rem; }
+  .lede { opacity: .75; margin: 0 0 1.5rem; }
+  code, .mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .9em; }
+
+  .verdict { border: 2px solid currentColor; border-radius: .5rem; padding: 1rem; margin: 1rem 0 2rem; }
+  .verdict h2 { margin: 0 0 .35rem; font-size: 1.1rem; }
+  .verdict p { margin: 0; }
+  .v-wait { opacity: .6; }
+  .v-good { color: #047857; }
+  .v-warn { color: #b45309; }
+  .v-bad  { color: #b91c1c; }
+
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: .5rem .4rem; border-bottom: 1px solid rgb(128 128 128 / .35); vertical-align: top; }
+  th { font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; opacity: .7; }
+  td.state { white-space: nowrap; font-weight: 700; }
+  .pass { color: #047857; }
+  .fail { color: #b91c1c; }
+  .pend { opacity: .55; }
+  td.detail { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .82em; opacity: .85; overflow-wrap: anywhere; }
+
+  .controls { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; margin-bottom: 1rem; }
+  input[type=url] { flex: 1 1 22rem; font: inherit; padding: .5rem .6rem; border: 1px solid #9ca3af; border-radius: .375rem; }
+  button { font: inherit; font-weight: 600; padding: .5rem 1.1rem; border: 0; border-radius: .375rem; background: #1d4ed8; color: #fff; cursor: pointer; }
+
+  .env { font-size: .85rem; opacity: .8; }
+  .env dt { float: left; width: 11rem; clear: left; font-weight: 600; }
+  .env dd { margin: 0 0 .2rem 11rem; overflow-wrap: anywhere; }
+
+  iframe.probe { width: 100%; height: 11rem; border: 1px solid #9ca3af; border-radius: .375rem; }
+  .hint { font-size: .85rem; opacity: .75; }
+</style>
+</head>
+<body>
+
+<h1>quiz-servant · embedding check</h1>
+<p class="lede">Upload this file to wherever you host slides, then open it <strong>on the lectern machine, on the university network</strong>. It reports which embedding techniques survive that environment.</p>
+
+<div class="controls">
+  <input type="url" id="base" value="https://quiz-servant.fly.dev" aria-label="Server base URL">
+  <button id="run">Run checks</button>
+</div>
+
+<div class="verdict v-wait" id="verdict">
+  <h2>Not run yet</h2>
+  <p>Press <strong>Run checks</strong>.</p>
+</div>
+
+<h2>Results</h2>
+<table>
+  <thead><tr><th style="width:8rem">Check</th><th style="width:6rem">Result</th><th>Detail</th></tr></thead>
+  <tbody id="rows"></tbody>
+</table>
+
+<h2>This page's environment</h2>
+<dl class="env" id="env"></dl>
+
+<h2>Visual iframe test</h2>
+<p class="hint">If the panel below is blank or shows an error, iframe embedding is blocked here — regardless of what the table says, since a cross-origin frame can report a load event even when its content failed.</p>
+<iframe class="probe" id="probe" title="Live embed probe"></iframe>
+
+<script>
+'use strict';
+
+// Checks are ordered so that a failure explains the failures below it:
+// reachability first (is the host even routable?), then CORS (can a script
+// read it?), then framing.
+const CHECKS = [
+  ['reach',  'Network reachability'],
+  ['cors',   'Cross-origin fetch (CORS)'],
+  ['frame',  'Iframe load'],
+  ['csp',    'Content Security Policy'],
+];
+
+const rows = {};
+const tbody = document.getElementById('rows');
+for (const [id, label] of CHECKS) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = '<td>' + label + '</td>'
+               + '<td class="state pend" data-state>—</td>'
+               + '<td class="detail" data-detail>not run</td>';
+  tbody.appendChild(tr);
+  rows[id] = { state: tr.querySelector('[data-state]'), detail: tr.querySelector('[data-detail]') };
+}
+
+function set(id, ok, detail) {
+  const r = rows[id];
+  r.state.textContent = ok === null ? '…' : (ok ? 'PASS' : 'FAIL');
+  r.state.className = 'state ' + (ok === null ? 'pend' : (ok ? 'pass' : 'fail'));
+  r.detail.textContent = detail;
+}
+
+// A CSP block is reported by the browser as an event naming the directive that
+// refused. Far more useful than inferring it from a generic fetch failure.
+const cspViolations = [];
+document.addEventListener('securitypolicyviolation', e => {
+  cspViolations.push(e.effectiveDirective + ' blocked ' + (e.blockedURI || '(inline)'));
+  set('csp', false, cspViolations.join(' · '));
+});
+
+// --- environment -----------------------------------------------------------
+const env = document.getElementById('env');
+function envRow(k, v) {
+  env.insertAdjacentHTML('beforeend', '<dt>' + k + '</dt><dd class="mono">' + v + '</dd>');
+}
+envRow('Page origin', location.origin === 'null' ? 'null (opened as a local file)' : location.origin);
+envRow('Protocol', location.protocol);
+const metaCsp = document.querySelector('meta[http-equiv="Content-Security-Policy" i]');
+envRow('CSP &lt;meta&gt; on page', metaCsp ? metaCsp.content : 'none');
+envRow('Browser', navigator.userAgent);
+
+// --- the checks ------------------------------------------------------------
+async function run() {
+  const base = document.getElementById('base').value.replace(/\/+$/, '');
+  for (const [id] of CHECKS) set(id, null, 'running…');
+  cspViolations.length = 0;
+
+  // 1. Reachability. `no-cors` deliberately: the response is opaque and
+  //    unreadable, but the request still fails loudly if DNS, TLS, a proxy, or
+  //    a firewall refused it. This separates "network blocked" from "CORS
+  //    missing", which otherwise look identical from a script.
+  let reachable = false;
+  const t0 = performance.now();
+  try {
+    await fetch(base + '/healthz', { mode: 'no-cors', cache: 'no-store' });
+    reachable = true;
+    set('reach', true, 'host answered in ' + Math.round(performance.now() - t0) + ' ms');
+  } catch (e) {
+    set('reach', false, 'cannot reach the host: ' + e);
+  }
+
+  // 2. CORS. Only meaningful if the host is reachable at all.
+  if (!reachable) {
+    set('cors', false, 'skipped — host unreachable');
+  } else {
+    try {
+      const t1 = performance.now();
+      const res = await fetch(base + '/embed/ethics-week3/trolley', { cache: 'no-store' });
+      const body = await res.text();
+      const ms = Math.round(performance.now() - t1);
+      set('cors', true, 'HTTP ' + res.status + ', read ' + body.length + ' bytes in ' + ms + ' ms');
+    } catch (e) {
+      set('cors', false, String(e) + ' — likely a missing CORS header or a connect-src policy');
+    }
+  }
+
+  // 3. Framing. Caveat: a cross-origin iframe fires `load` even when the
+  //    server refused with X-Frame-Options, so this cannot be trusted alone —
+  //    hence the visual probe below.
+  const probe = document.getElementById('probe');
+  let settled = false;
+  const timer = setTimeout(() => {
+    if (!settled) { settled = true; set('frame', false, 'no load event within 10 s'); }
+  }, 10000);
+  probe.onload = () => {
+    if (settled) return;
+    settled = true; clearTimeout(timer);
+    set('frame', true, 'load event fired — confirm the panel below actually renders');
+  };
+  probe.onerror = () => {
+    if (settled) return;
+    settled = true; clearTimeout(timer);
+    set('frame', false, 'iframe raised an error');
+  };
+  probe.src = base + '/embed/ethics-week3/join';
+
+  // 4. CSP: no news is good news, so give violations a moment to arrive.
+  setTimeout(() => {
+    if (cspViolations.length === 0) set('csp', true, 'no policy violations reported');
+    verdict(reachable);
+  }, 1200);
+}
+
+// --- verdict ---------------------------------------------------------------
+function verdict(reachable) {
+  const box = document.getElementById('verdict');
+  const corsOk = rows.cors.state.textContent === 'PASS';
+  const frameOk = rows.frame.state.textContent === 'PASS';
+  let cls, head, body;
+
+  if (!reachable) {
+    cls = 'v-bad';
+    head = 'The server is unreachable from here';
+    body = 'This blocks every embedding technique equally, and it means students on this '
+         + 'network cannot answer either. This is a hosting or firewall problem to solve '
+         + 'before anything else — not an embedding decision.';
+  } else if (corsOk) {
+    cls = 'v-good';
+    head = 'Seamless embedding will work';
+    body = 'A script on this page can read the results directly, so panels can be injected '
+         + 'into the deck and inherit its fonts, scale, theme, and reveal behaviour. '
+         + 'No iframe needed.';
+  } else if (frameOk) {
+    cls = 'v-warn';
+    head = 'Iframe only';
+    body = 'Cross-origin reads are blocked but framing works. Embedding is possible, but '
+         + 'panels cannot inherit the deck’s styling or participate in minpressive’s '
+         + 'reveal. Worth checking whether your static host sets a connect-src policy — '
+         + 'or serving the deck from the quiz server, which makes the request same-origin.';
+  } else {
+    cls = 'v-bad';
+    head = 'Both techniques blocked';
+    body = 'The host is reachable but neither reading nor framing succeeded. Check the CSP '
+         + 'row above for the directive responsible.';
+  }
+  box.className = 'verdict ' + cls;
+  box.innerHTML = '<h2>' + head + '</h2><p>' + body + '</p>';
+}
+
+document.getElementById('run').addEventListener('click', run);
+run();
+</script>
+
+</body>
+</html>

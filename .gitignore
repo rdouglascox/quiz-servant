@@ -8,3 +8,6 @@ quiz-servant.cabal
 
 # Response logs pulled from the server after a lecture.
 *.jsonl
+
+# Built from slides/*.md with pandoc.
+slides/*.html
