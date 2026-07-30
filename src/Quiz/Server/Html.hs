@@ -169,9 +169,8 @@ embedJoin _ Nothing = embedNotLive "no session"
 embedJoin base (Just (quiz, code)) =
   shell (quizTitle quiz) embedCss (Just 5) $
     div_ [class_ "join"] $ do
-      p_ [class_ "small"] "Join at"
-      p_ [class_ "url"] (toHtml (joinUrl base code))
       joinQr base code
+      p_ [class_ "url"] (toHtml (joinUrl base code))
 
 -- | Rendered for reading aloud and typing on a phone, so the scheme is
 -- dropped: nobody types @https://@.
@@ -316,11 +315,14 @@ fragmentNotLive =
 
 -- | The join address, in row form, for a deck that wants it inline rather than
 -- framed.
+-- | The code leads and the URL sits under it as the caption: in a room, most
+-- students scan and never read the address at all, so it is the fallback
+-- rather than the instruction. No \"Join at\" label — a QR above a URL does
+-- not need saying.
 joinFragment :: Text -> JoinCode -> Html ()
 joinFragment base code = do
-  tr_ [class_ "quiz-meta"] (td_ [colspan_ "2"] "Join at")
-  tr_ [class_ "quiz-join"] (td_ [colspan_ "2"] (toHtml (joinUrl base code)))
   tr_ [class_ "quiz-qr-row"] (td_ [colspan_ "2"] (joinQr base code))
+  tr_ [class_ "quiz-join"] (td_ [colspan_ "2"] (toHtml (joinUrl base code)))
 
 phaseWord :: Phase -> Text
 phaseWord = \case
@@ -558,5 +560,6 @@ embedCss =
       -- unscannable rectangle. aspect-ratio is the minimum needed for it to
       -- render as a QR code at all; everything past that is left to whatever
       -- embeds this page.
-      ".quiz-qr svg { display: block; width: 12rem; aspect-ratio: 1; margin: .5rem auto 0; }"
+      ".quiz-qr svg { display: block; width: 12rem; aspect-ratio: 1; margin: 0 auto; }"
+    , ".join { text-align: center; }"
     ]

@@ -45,8 +45,15 @@
      Mixing toward transparent keeps the label readable over the fill, and
      inherits whatever ink the deck uses — so this works in light and dark
      without knowing which it is. */
-  /* Full measure, or the bars are squeezed into a shrink-to-fit table. */
-  [data-quiz] { width: 100%; }
+  /* Full measure, or the bars are squeezed into a shrink-to-fit table.
+     `display: table` is not redundant: minpressive sets `display: block` on
+     every table (to let wide ones scroll horizontally), which takes the
+     element out of table layout — the element gets the width, but the
+     anonymous table box generated inside it sizes to content, so cells
+     collapse and neither `width: 100%` nor `colspan` on a cell does
+     anything. The tallies only looked right because their text happens to
+     fill the measure; the join panel, with one short row, gave it away. */
+  [data-quiz] { width: 100%; display: table; }
 
   /* ---------------------------------------------------------------------
      We own this component's chrome.
@@ -85,6 +92,25 @@
 
   [data-quiz] .quiz-count { text-align: right; font-variant-numeric: tabular-nums; }
   [data-quiz] .quiz-meta  { font-size: .8em; opacity: .7; }
+
+  /* The join panel: code centred, address beneath it as the caption. Sized in
+     em so it tracks the deck's fluid type rather than pinning to a pixel size
+     — minpressive scales everything from one clamp() on the root font, and a
+     QR that ignored that would be conspicuous on a projector.
+
+     `width: 100%` on the cells is doing real work. These rows are colspan=2,
+     but colspan alone does not make a cell span the measure: with the table's
+     automatic layout and no other rows to establish column widths, the join
+     panel's columns collapse to their content, and the "centred" QR ends up
+     centred inside a narrow box hugging the left margin. Claiming the full
+     width gives the centring something to centre against. */
+  [data-quiz] .quiz-qr-row > td,
+  [data-quiz] .quiz-join > td {
+    width: 100%;
+    text-align: center;
+  }
+  [data-quiz] .quiz-qr-row > td { padding-bottom: .25em; }
+  [data-quiz] .quiz-qr svg { display: block; width: 7em; height: auto; margin: 0 auto; }
 
   /* Bold alone reads as noise at a distance — this is a lecture theatre, not
      a document. A darker fill gives the correct row a second, independent
