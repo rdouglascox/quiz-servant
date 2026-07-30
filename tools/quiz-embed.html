@@ -48,6 +48,29 @@
   /* Full measure, or the bars are squeezed into a shrink-to-fit table. */
   [data-quiz] { width: 100%; }
 
+  /* ---------------------------------------------------------------------
+     We own this component's chrome.
+
+     A panel is authored as ::: {.quiz question=…} and its markup is emitted
+     by tools/quiz-filter.lua, so there is no reason to inherit the deck's
+     table styling wholesale. minpressive rules every <table> above and below
+     the <tbody> in ink — reasonable for a data table, wrong for a tally,
+     which is a picture of a distribution rather than a grid of values. The
+     bars already carry the structure; the rules only box them in.
+
+     `!important` rather than relying on source order: these selectors tie on
+     specificity with minpressive's own `table.highlight tbody`, so they would
+     otherwise win only by virtue of this stylesheet being included after the
+     body. That is a silent trap the day the include moves.
+     --------------------------------------------------------------------- */
+  [data-quiz],
+  [data-quiz] tbody,
+  [data-quiz] tr,
+  [data-quiz] th,
+  [data-quiz] td {
+    border: 0 !important;
+  }
+
   [data-quiz] .quiz-option {
     background-image: linear-gradient(to right,
       color-mix(in srgb, currentColor 18%, transparent) 0 calc(var(--pct, 0) * 1%),
@@ -85,7 +108,10 @@
      that minpressive uses, whereas a table-cell border always is. */
   [data-quiz] .quiz-text { font-style: italic; }
   [data-quiz] .quiz-text > td {
-    border-left: 2px solid color-mix(in srgb, currentColor 25%, transparent);
+    /* Wins back over the blanket `border: 0` reset above: same `!important`,
+       but one class more specific, so this is the deliberate exception rather
+       than a fight with source order. */
+    border-left: 2px solid color-mix(in srgb, currentColor 25%, transparent) !important;
     padding-left: .75em;
   }
 </style>
