@@ -3,7 +3,14 @@
 # For more information, please see the documentation at:
 #   https://docs.haskellstack.org/en/stable/topics/lock_files
 
-packages: []
+packages:
+- completed:
+    hackage: qrcode-core-0.9.10@sha256:2b0ec01ed8eed344c3ed6885310016dc42113af79426ffbcca41ac384ca9db5c,2590
+    pantry-tree:
+      sha256: 7d553071ca91502794bfd508ead7382ea8e640ba3ed66b0d031eb05f25227a88
+      size: 2485
+  original:
+    hackage: qrcode-core-0.9.10@sha256:2b0ec01ed8eed344c3ed6885310016dc42113af79426ffbcca41ac384ca9db5c,2590
 snapshots:
 - completed:
     sha256: 0d0bb681dd5be9b930c8fc070d717aae757b9aed176ae6047d87624b46406816

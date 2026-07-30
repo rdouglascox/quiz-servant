@@ -3,10 +3,11 @@ snapshot: lts-24.12 # GHC 9.10.3
 packages:
   - .
 
-extra-deps: []
-# Off-snapshot packages go here, pinned to a Hackage version. Their own
-# off-snapshot dependencies must be pinned here too. The QR-code libraries
-# are the likely candidates when we get to the join page.
+extra-deps:
+  # Off-snapshot; only the module that turns text into a QR bit-matrix, no
+  # image codec. We render it ourselves — inline SVG for the join panel,
+  # Unicode half-blocks for the terminal — so nothing else is needed.
+  - qrcode-core-0.9.10@sha256:2b0ec01ed8eed344c3ed6885310016dc42113af79426ffbcca41ac384ca9db5c,2590
 
 # The local toolchain is GHC 9.10.3, matching this snapshot exactly, so there
 # is no reason to let stack download a second copy. The Dockerfile passes

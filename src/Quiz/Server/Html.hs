@@ -30,6 +30,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Lucid
 
+import Quiz.Qr (qrMatrix, qrSvg)
 import Quiz.Store
 import Quiz.Token (FormToken (..))
 import Quiz.Types
@@ -170,6 +171,7 @@ embedJoin base (Just (quiz, code)) =
     div_ [class_ "join"] $ do
       p_ [class_ "small"] "Join at"
       p_ [class_ "url"] (toHtml (joinUrl base code))
+      joinQr base code
 
 -- | Rendered for reading aloud and typing on a phone, so the scheme is
 -- dropped: nobody types @https://@.
@@ -181,6 +183,21 @@ joinUrl base code = host <> "/s/" <> unJoinCode code
         . T.replace "https://" ""
         . T.replace "http://" ""
         $ base
+
+-- | The full URL, scheme included, for a QR reader rather than a human.
+-- 'joinUrl' drops the scheme because it is meant to be read aloud; a QR code
+-- needs an actual URI so a phone offers to open a link rather than run the
+-- text through a search.
+joinFullUrl :: Text -> JoinCode -> Text
+joinFullUrl base code = T.dropWhileEnd (== '/') base <> "/s/" <> unJoinCode code
+
+-- | The join QR, shared by the whole-document and injected-fragment forms.
+-- Silently omitted if it could not be encoded — unreachable in practice, see
+-- 'qrMatrix' — rather than breaking the rest of the page over it.
+joinQr :: Text -> JoinCode -> Html ()
+joinQr base code = case qrMatrix (joinFullUrl base code) of
+  Nothing -> pure ()
+  Just modules -> div_ [class_ "quiz-qr"] (toHtmlRaw (qrSvg modules))
 
 embedResults :: Question -> Phase -> Tally -> Html ()
 embedResults question phase tally =
@@ -303,6 +320,7 @@ joinFragment :: Text -> JoinCode -> Html ()
 joinFragment base code = do
   tr_ [class_ "quiz-meta"] (td_ [colspan_ "2"] "Join at")
   tr_ [class_ "quiz-join"] (td_ [colspan_ "2"] (toHtml (joinUrl base code)))
+  tr_ [class_ "quiz-qr-row"] (td_ [colspan_ "2"] (joinQr base code))
 
 phaseWord :: Phase -> Text
 phaseWord = \case
@@ -535,4 +553,10 @@ embedCss =
     , -- Keeps the label and count above the fill rather than behind it.
       ".bar .label, .bar .n { position: relative; }"
     , ".bar .n { float: right; }"
+    , -- Structural, not decorative: an <svg> with no width/height defaults to
+      -- a 300x150 box in most browsers, which would squash the code into an
+      -- unscannable rectangle. aspect-ratio is the minimum needed for it to
+      -- render as a QR code at all; everything past that is left to whatever
+      -- embeds this page.
+      ".quiz-qr svg { display: block; width: 12rem; aspect-ratio: 1; margin: .5rem auto 0; }"
     ]

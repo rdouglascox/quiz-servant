@@ -49,6 +49,7 @@ library:
     - lucid
     - memory
     - mtl
+    - qrcode-core
     - servant
     - servant-client
     - servant-lucid
@@ -85,6 +86,7 @@ executables:
       - http-client-tls
       - http-types
       - optparse-applicative
+      - qrcode-core
       - servant-client
 
 tests:

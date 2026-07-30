@@ -25,6 +25,7 @@ import System.IO (hPutStrLn, stderr)
 import Quiz.Client
 import Quiz.Encoding (forceUtf8)
 import Quiz.Parse (loadQuizFile)
+import Quiz.Qr (qrAnsi, qrMatrix)
 import Quiz.Render (renderQuizPreview)
 import Quiz.Server.Api (NewSession (..), PhaseChange (..))
 import Quiz.Store
@@ -172,12 +173,19 @@ run = \case
       Aeson.Success s -> pure (s :: Session)
       Aeson.Error e -> die' "server reply was not a session" (T.pack e)
     let url path = showBaseUrl base <> T.unpack path
+        studentUrl = url ("/s/" <> unJoinCode (sessionCode session))
     putStrLn "session created and made live"
     putStrLn ("  join code:  " <> T.unpack (unJoinCode (sessionCode session)))
-    putStrLn ("  students:   " <> url ("/s/" <> unJoinCode (sessionCode session)))
+    putStrLn ("  students:   " <> studentUrl)
     putStrLn ("  join slide: " <> url ("/embed/" <> slug <> "/join"))
     putStrLn ("  presenter:  " <> url ("/p/" <> unSecret (sessionSecret session)))
     putStrLn "the presenter link is a secret — never put it on the projector"
+    -- A quick way to test the join flow, or to hold up in front of a room
+    -- before the slides are even open. Silently skipped if the URL somehow
+    -- could not be encoded — unreachable in practice, see 'qrMatrix'.
+    for_ (qrMatrix (T.pack studentUrl)) $ \modules -> do
+      putStrLn ""
+      TIO.putStr (qrAnsi modules)
   SetPhase phase qkey -> do
     (remote, base) <- connect
     _ <- runRemote base (callPhase remote (PhaseChange qkey phase))

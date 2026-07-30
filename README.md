@@ -61,7 +61,8 @@ quizctl session ethics-week3 --label "2026 S2 W3"
 ```
 
 That last command prints everything you need for the lecture: the join code,
-the student URL, the slide URL, and your presenter link.
+the student URL, the slide URL, your presenter link, and a QR code you can
+scan straight from the terminal to check the join flow before class.
 
 To try it without deploying anything, run the server locally:
 
@@ -254,6 +255,12 @@ enough height to be recognised as a reveal step.
 
 Slide URLs name a quiz and a question but **never a session**, so a deck is
 written once and runs every year the unit is taught.
+
+The `question=join` panel — primarily what students use — includes a QR code
+for the join address alongside the text, so a phone can scan rather than type.
+It is plain inline SVG, coloured with the deck's own ink, so it follows light
+and dark themes the same way the tally bars do and needs no image file or
+external request.
 
 `tools/quiz-embed.html` ships a default stylesheet — bars drawn from a `--pct`
 the server sets — which you can edit or delete. The server sends structure and

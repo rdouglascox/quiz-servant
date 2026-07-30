@@ -200,6 +200,47 @@ would never do anything seemed worse than a noisy build.
 `pandoc --lua-filter=tools/quiz-filter.lua ...`, ahead of `--template` so the
 transform runs before the document is otherwise assembled.
 
+### QR codes, rendered rather than fetched as images
+
+The join panel — the one students actually use — carries a QR code for the
+join address alongside the text. `Quiz.Qr` wraps `qrcode-core`, which hands
+back only a bit matrix, and nothing more is pulled in: no image codec, no PNG.
+
+Two renderers, from the same matrix:
+
+- **Inline SVG** (`qrSvg`), used by both the whole-document join embed and the
+  injected fragment. Modules are filled with `currentColor` — the same trick
+  as the tally bars — so the code inherits the deck's ink and needs no
+  light/dark handling of its own. A dark deck yields light-on-dark modules,
+  which scanners read exactly as readily as the reverse. An `<img>` pointing
+  at a rendered PNG could not do this any more than an iframe could; that is
+  precisely the problem the rest of this server's embedding was built to
+  avoid, and it would have been an odd place to reintroduce it.
+- **Unicode half-blocks** (`qrAnsi`), for `quizctl session` to print directly
+  in the terminal — a way to test the join flow, or to hold up a laptop screen
+  in front of a room, before any slide is open. Two module rows share one
+  character row (▀▄█ and space), since a terminal cell is about twice as tall
+  as it is wide. No ANSI colour codes: a dark module is the terminal's default
+  foreground, a light module is a plain space, so it reads correctly in both
+  light and dark terminal themes without asking which — the same policy as
+  the SVG, carried into a different medium.
+
+An un-sized `<svg>` defaults to a 300×150 box in most browsers, which would
+squash the code into an unscannable rectangle. The `.quiz-qr` `aspect-ratio: 1`
+rule in `embedCss` is therefore structural, not decorative — the minimum
+needed for the code to render as a QR code at all — unlike everything else in
+that stylesheet, which is deliberately silent on sizing.
+
+The QR always encodes the join URL *with* its scheme (`joinFullUrl`), unlike
+the text beside it (`joinUrl`), which drops the scheme because it is meant to
+be read aloud. A reader needs an actual URI to offer opening it as a link
+rather than running the text through a search.
+
+Verified by decoding the server's actual rendered SVG with a real QR reader
+(Chrome's `BarcodeDetector`) rather than trusting the pattern by eye: it
+returned the exact join URL. The terminal and SVG renderers consume the same
+matrix from the same encoding call, so that one check covers both.
+
 ### Cross-origin
 
 The `/embed` endpoints send `Access-Control-Allow-Origin: *` so a deck hosted
