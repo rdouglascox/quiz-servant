@@ -62,8 +62,32 @@
 
   [data-quiz] .quiz-count { text-align: right; font-variant-numeric: tabular-nums; }
   [data-quiz] .quiz-meta  { font-size: .8em; opacity: .7; }
-  [data-quiz] .is-correct .quiz-option { font-weight: 700; }
-  [data-quiz] .quiz-text  { font-style: italic; }
+
+  /* Bold alone reads as noise at a distance — this is a lecture theatre, not
+     a document. A darker fill gives the correct row a second, independent
+     signal, using the same currentColor tint the bar is already built from
+     rather than introducing an accent colour minpressive itself never uses. */
+  [data-quiz] .is-correct .quiz-option {
+    font-weight: 700;
+    background-image: linear-gradient(to right,
+      color-mix(in srgb, currentColor 38%, transparent) 0 calc(var(--pct, 0) * 1%),
+      transparent 0);
+  }
+
+  /* A free-text answer is, structurally, a quotation — so it gets minpressive's
+     own device for one: a left rule. currentColor-relative rather than
+     minpressive's literal #e6e6e6, so this still reads correctly if a deck
+     ever uses a template with a different palette.
+
+     The class lives on the <tr> (see Quiz.Server.Html.embedFragment), but the
+     border is set on the child <td>: a border-left on a table-row is not
+     reliably rendered under the default (non-collapsed) table border model
+     that minpressive uses, whereas a table-cell border always is. */
+  [data-quiz] .quiz-text { font-style: italic; }
+  [data-quiz] .quiz-text > td {
+    border-left: 2px solid color-mix(in srgb, currentColor 25%, transparent);
+    padding-left: .75em;
+  }
 </style>
 
 <script>

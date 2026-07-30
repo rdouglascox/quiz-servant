@@ -241,6 +241,50 @@ Verified by decoding the server's actual rendered SVG with a real QR reader
 returned the exact join URL. The terminal and SVG renderers consume the same
 matrix from the same encoding call, so that one check covers both.
 
+### Matching minpressive's own look
+
+`tools/quiz-embed.html`'s stylesheet targets the injected fragment
+specifically — the whole-document `/embed/...` pages (`Quiz.Server.Html`'s
+`embedCss`) are a separate, deliberately plain stylesheet for the iframe
+fallback, and are not this.
+
+Because a fragment is injected into a `<table>` the deck already owns, most of
+"matching the deck's look" happens for free by inheritance — confirmed by
+inspecting the actual computed styles in a real minpressive build rather than
+assuming it: the injected cells came back `font-family: Times` (minpressive
+sets none itself, so both templates' choice of serif/Gill Sans passes straight
+through), `border-radius: 0` (minpressive uses none anywhere — every rounded
+corner in this project belongs to the *student*-facing pages, a different
+stylesheet with a different job), and the `<tbody>` picked up minpressive's
+own top/bottom ink-coloured rule with no extra CSS at all. The QR's square
+sizing is likewise already handled by minpressive's own blanket
+`svg { height: auto; max-width: 100% }` rule, which fixes the classic
+unsized-SVG-defaults-to-300×150 problem — nothing needed there either. Neither
+`_basic` nor `_fancy` supports a dark theme (both hardcode a light "paper"
+palette), which is why `currentColor`-relative tints are used throughout
+rather than that being a light/dark concession.
+
+Two things were not free, and are what this stylesheet actually adds:
+
+- **"Correct" needs a second signal.** Bold weight alone reads as noise at
+  lecture-room distance, and this is the one property where reveal timing
+  matters — an `.is-correct` fill of a literal colour would show through
+  before its step, so it has to stay `currentColor`-based like the base tint.
+  The fix is more of the same device rather than a different one: 38% tint
+  instead of the base 18%, alongside the bold. Verified by forcing the
+  ancestor's ink colour and reading back the resolved `background-image` — the
+  two are 0.18 vs 0.38 alpha, clearly distinct, still monochrome.
+- **A free-text answer is, structurally, a quotation.** It gets minpressive's
+  own device for one — a left rule — rather than sitting as undecorated
+  italic. `currentColor`-relative rather than minpressive's literal `#e6e6e6`,
+  so it stays correct if a deck ever uses a template with a different palette.
+  The rule has to live on the `<td>`, not the `<tr>` that actually carries the
+  `quiz-text` class: a border-left on a table row is not reliably rendered
+  under the default (non-collapsed) table border model minpressive uses,
+  where a table-cell border always is. Caught by checking the rendered border
+  computed to zero-alpha until retargeted — not visible by inspection, since
+  the row and cell occupy the same space either way.
+
 ### Cross-origin
 
 The `/embed` endpoints send `Access-Control-Allow-Origin: *` so a deck hosted
