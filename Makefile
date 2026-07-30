@@ -18,10 +18,11 @@ DECKS := $(patsubst %.md,%.html,$(wildcard slides/*.md))
 .PHONY: slides clean-slides
 slides: $(DECKS)
 
-slides/%.html: slides/%.md tools/quiz-embed.html
+slides/%.html: slides/%.md tools/quiz-embed.html tools/quiz-filter.lua
 	@test -f "$(MINPRESSIVE)" || \
 	  { echo "template not found: $(MINPRESSIVE) — set MINPRESSIVE=..."; exit 1; }
 	pandoc $< \
+	  --lua-filter=tools/quiz-filter.lua \
 	  --template=$(MINPRESSIVE) \
 	  --include-after-body=tools/quiz-embed.html \
 	  --embed-resources --standalone \

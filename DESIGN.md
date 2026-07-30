@@ -179,6 +179,27 @@ Three details that are load-bearing rather than cosmetic:
 `join` is a reserved question key — the join panel occupies that path.
 `Quiz.Validate` rejects it rather than letting it silently shadow.
 
+### A Lua filter removes the boilerplate
+
+`tools/quiz-filter.lua` turns
+
+```
+::: {.quiz question=trolley}
+Waiting for responses…
+:::
+```
+
+into the `<table data-quiz="trolley">` above, using the div's own content as
+the placeholder row. This exists purely to avoid hand-writing HTML in an
+otherwise all-Markdown deck; it changes nothing about the wire format or the
+server. A `.quiz` div with no `question=` attribute is left as an ordinary div
+and warns on stderr during the pandoc build — silently emitting a panel that
+would never do anything seemed worse than a noisy build.
+
+`make slides` wires the filter in; by hand it is
+`pandoc --lua-filter=tools/quiz-filter.lua ...`, ahead of `--template` so the
+transform runs before the document is otherwise assembled.
+
 ### Cross-origin
 
 The `/embed` endpoints send `Access-Control-Allow-Origin: *` so a deck hosted

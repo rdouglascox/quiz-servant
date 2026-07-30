@@ -203,10 +203,12 @@ an old one restores its tallies for a make-up class.
 Slides fetch a fragment and inject it, so panels inherit your deck's
 typography, scale, theme, and — in a reveal-based deck — its build.
 
-Include the script once, per deck:
+Wire in the script and the filter once, per deck:
 
 ```bash
-pandoc talk.md --template=minpressive_basic.html \
+pandoc talk.md \
+       --lua-filter=tools/quiz-filter.lua \
+       --template=minpressive_basic.html \
        --include-after-body=tools/quiz-embed.html -o talk.html
 ```
 
@@ -224,7 +226,21 @@ header-includes: |
 ```
 
 Then drop a panel wherever you want results, naming a question key — or `join`
-for the joining address:
+for the joining address — as a fenced div:
+
+```markdown
+::: {.quiz question=trolley}
+Waiting for responses…
+:::
+```
+
+`tools/quiz-filter.lua` turns that into the `<table data-quiz="trolley">` the
+embed script looks for, using the div's own content as the placeholder row —
+no HTML to hand-write in the deck at all. A `.quiz` div with no `question=`
+attribute is left untouched and warns on stderr during the build, rather than
+silently producing a panel that never does anything.
+
+If you would rather not run the filter, the equivalent by hand is:
 
 ```html
 <table data-quiz="trolley"><tbody>
@@ -232,9 +248,9 @@ for the joining address:
 </tbody></table>
 ```
 
-The placeholder row is not decoration: it is what shows before the first fetch,
-what shows if JavaScript never runs, and what gives the table enough height to
-be recognised as a reveal step.
+Either way, the placeholder is not decoration: it is what shows before the
+first fetch, what shows if JavaScript never runs, and what gives the table
+enough height to be recognised as a reveal step.
 
 Slide URLs name a quiz and a question but **never a session**, so a deck is
 written once and runs every year the unit is taught.
