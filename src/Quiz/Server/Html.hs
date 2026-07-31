@@ -206,7 +206,9 @@ embedResults question phase tally =
       TallyOptions rows total ->
         div_ [class_ "bars"] (mapM_ (optionBar phase question total) rows)
       TallyScale rows total ->
-        div_ [class_ "bars"] (mapM_ (scaleBar total) rows)
+        div_
+          [class_ "bars"]
+          (mapM_ (\(p, n) -> scaleBar total (scalePointLabel question p, n)) rows)
       TallyTexts rows _ -> do
         let shown = [t | (_, t, True) <- rows]
         if null shown
@@ -222,11 +224,22 @@ optionBar phase question total (option, n) =
   where
     highlight = phase == Revealed && optionKey option `elem` correctKeys question
 
-scaleBar :: Int -> (Int, Int) -> Html ()
-scaleBar total (point, n) =
+-- | A scale point as it should read on screen: the number, plus the author's
+-- label for that point where there is one. Without them a projected scale is a
+-- bare 1–5 with nothing to say which end is which — the student answering it
+-- sees the labels on their own form, so the room was the only party missing
+-- them.
+scalePointLabel :: Question -> Int -> Text
+scalePointLabel question point = case questionBody question of
+  BodyScale spec
+    | Just l <- Map.lookup point (scaleLabels spec) -> tshow point <> " " <> l
+  _ -> tshow point
+
+scaleBar :: Int -> (Text, Int) -> Html ()
+scaleBar total (label, n) =
   div_ [class_ "bar"] $ do
     div_ [class_ "fill", style_ ("width:" <> tshow (percent n total) <> "%")] mempty
-    span_ [class_ "label"] (toHtml (tshow point))
+    span_ [class_ "label"] (toHtml label)
     span_ [class_ "n"] (toHtml (tshow n))
 
 correctKeys :: Question -> [OptionKey]
@@ -279,7 +292,7 @@ embedFragment question phase tally = case tally of
         n
 
     scaleRow :: (Int, Int) -> Html ()
-    scaleRow (point, n) = row False (tshow point) n
+    scaleRow (point, n) = row False (scalePointLabel question point) n
 
     row :: Bool -> Text -> Int -> Html ()
     row correct label n =
