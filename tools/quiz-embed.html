@@ -91,7 +91,6 @@
   }
 
   [data-quiz] .quiz-count { text-align: right; font-variant-numeric: tabular-nums; }
-  [data-quiz] .quiz-meta  { font-size: .8em; opacity: .7; }
 
   /* The join panel: code centred, address beneath it as the caption. Sized in
      em so it tracks the deck's fluid type rather than pinning to a pixel size
@@ -170,13 +169,23 @@ document.addEventListener('DOMContentLoaded', function () {
                    + '/' + encodeURIComponent(question) + '/frag';
     var timer = null;
 
+    // Whatever the deck author wrote in the panel, kept so it can be put back.
+    // A free-text question with no approved answers returns an empty fragment,
+    // and an empty <tbody> collapses the table to nothing — the panel would
+    // vanish as you revealed it. Restoring the placeholder rather than simply
+    // declining to overwrite matters: declining would leave the last approved
+    // answers on screen after you hid them again.
+    var placeholder = target.innerHTML;
+
     function refresh() {
       fetch(url, { cache: 'no-store' })
         .then(function (r) { return r.ok ? r.text() : null; })
         .then(function (html) {
+          if (html === null) return;
+          var next = html.trim() === '' ? placeholder : html;
           // Only touch the DOM when something changed, so bars are not
           // rebuilt — and CSS transitions not restarted — twice a second.
-          if (html !== null && html !== target.innerHTML) target.innerHTML = html;
+          if (next !== target.innerHTML) target.innerHTML = next;
         })
         .catch(function () { /* a dropped poll is not worth reporting mid-lecture */ });
     }

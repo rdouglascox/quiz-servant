@@ -203,28 +203,15 @@ embedResults question phase tally =
   shell (questionPrompt question) embedCss (Just 2) $ do
     p_ [class_ "prompt"] (toHtml (questionPrompt question))
     case tally of
-      TallyOptions rows total -> do
-        countLine total
+      TallyOptions rows total ->
         div_ [class_ "bars"] (mapM_ (optionBar phase question total) rows)
-      TallyScale rows total -> do
-        countLine total
+      TallyScale rows total ->
         div_ [class_ "bars"] (mapM_ (scaleBar total) rows)
-      TallyTexts rows total -> do
-        countLine total
+      TallyTexts rows _ -> do
         let shown = [t | (_, t, True) <- rows]
         if null shown
           then p_ [class_ "small"] "No answers shown yet."
           else ul_ [class_ "texts"] (mapM_ (li_ . toHtml) shown)
-  where
-    countLine :: Int -> Html ()
-    countLine total =
-      p_ [class_ "small"] $
-        toHtml (tshow total <> " response" <> (if total == 1 then "" else "s"))
-          <> case phase of
-            Live -> " · open"
-            Pending -> " · not open yet"
-            Closed -> " · closed"
-            Revealed -> " · answers shown"
 
 optionBar :: Phase -> Question -> Int -> (Option, Int) -> Html ()
 optionBar phase question total (option, n) =
@@ -265,19 +252,19 @@ percent n total = (n * 100) `div` total
 -- hides un-revealed blocks with @color: rgba(0,0,0,0)@, and @<table>@ is both
 -- in that selector and in its list of step elements, so a table participates in
 -- the reveal automatically while a @<div>@ would sit there visible.
+--
+-- No response count and no phase: that is the presenter's information, and the
+-- presenter page already carries it. A room reads the shape of the
+-- distribution, not the denominator — and the count was the one thing on the
+-- panel that changed under its own steam while nobody was looking at it.
 embedFragment :: Question -> Phase -> Tally -> Html ()
-embedFragment question phase tally = do
-  tr_ [class_ "quiz-meta"] $
-    td_ [colspan_ "2"] $ do
-      toHtml (tshow total <> " response" <> (if total == 1 then "" else "s"))
-      toHtml (" · " <> phaseWord phase)
-  case tally of
-    TallyOptions rows _ -> mapM_ optionRow rows
-    TallyScale rows _ -> mapM_ scaleRow rows
-    TallyTexts rows _ ->
-      case [t | (_, t, True) <- rows] of
-        [] -> pure ()
-        shown -> mapM_ textRow shown
+embedFragment question phase tally = case tally of
+  TallyOptions rows _ -> mapM_ optionRow rows
+  TallyScale rows _ -> mapM_ scaleRow rows
+  TallyTexts rows _ ->
+    case [t | (_, t, True) <- rows] of
+      [] -> pure ()
+      shown -> mapM_ textRow shown
   where
     total = case tally of
       TallyOptions _ n -> n
@@ -324,12 +311,6 @@ joinFragment base code = do
   tr_ [class_ "quiz-qr-row"] (td_ [colspan_ "2"] (joinQr base code))
   tr_ [class_ "quiz-join"] (td_ [colspan_ "2"] (toHtml (joinUrl base code)))
 
-phaseWord :: Phase -> Text
-phaseWord = \case
-  Live -> "open"
-  Pending -> "not open yet"
-  Closed -> "closed"
-  Revealed -> "answers shown"
 
 -- Presenter -----------------------------------------------------------------
 
