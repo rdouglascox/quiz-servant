@@ -9,6 +9,19 @@ extra-deps:
   # Unicode half-blocks for the terminal — so nothing else is needed.
   - qrcode-core-0.9.10@sha256:2b0ec01ed8eed344c3ed6885310016dc42113af79426ffbcca41ac384ca9db5c,2590
 
+# qrcode-core's upper bounds predate GHC 9.10, so it refuses the bytestring and
+# containers that ship with it. The bounds are stale rather than real — it
+# builds and its output is verified by decoding an actual QR code in the test
+# suite — so relax them for that package alone.
+#
+# Scoped deliberately. A global `allow-newer: true` in ~/.stack/config.yaml is
+# what hid this: the build worked on the author's machine and failed in CI,
+# because that setting is not in the repository. Anything the build depends on
+# has to live here.
+allow-newer: true
+allow-newer-deps:
+  - qrcode-core
+
 # The local toolchain is GHC 9.10.3, matching this snapshot exactly, so there
 # is no reason to let stack download a second copy. The Dockerfile passes
 # --system-ghc for the same reason.

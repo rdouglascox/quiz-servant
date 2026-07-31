@@ -438,6 +438,17 @@ Keep these; they were found the hard way.
   irrelevant. There is a regression test for this.
 - **`stack -j` needs an argument**, unlike cabal's bare `-j`. Stack already
   parallelises across cores, so just omit it.
+- **Anything the build depends on must live in the repository.** `qrcode-core`
+  carries upper bounds that predate GHC 9.10, so it refuses that compiler's
+  `bytestring` and `containers`. It built here anyway — because
+  `~/.stack/config.yaml` on the author's machine sets a global
+  `allow-newer: true`, which CI has no idea about. Local verification was
+  therefore never a fair test, and the failure only appeared once the deploy
+  reached a clean container. `stack.yaml` now sets `allow-newer` scoped to that
+  one package via `allow-newer-deps`.
+  To check a build the way CI sees it without waiting on Docker, construct the
+  plan against a throwaway root — this reproduces the failure in seconds:
+  `STACK_ROOT=$(mktemp -d) stack build --dry-run --system-ghc`.
 - **Servant parses the request body before the handler runs**, so a bad body on
   an authenticated route returns 400 rather than 401. Not a hole — the handler
   still enforces auth — but do not read a 400 as "the token was accepted".
