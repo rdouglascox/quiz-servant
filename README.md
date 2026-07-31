@@ -104,6 +104,7 @@ questions:
 | `multi` | `options:`, optional `select: 1..3`, optional `correct: [a, b]` | Checkboxes |
 | `text` | optional `max_length:` (default 240) | Always moderated before display |
 | `scale` | `range: 1..5`, optional `labels:` | Likert; labels keyed by integer |
+| `grid` | `items:`, `range: 1..5`, optional `labels:` | One scale applied to several propositions |
 
 ```yaml
   - key: which-consequentialist
@@ -128,7 +129,28 @@ questions:
     labels:
       1: "Not at all"
       5: "Very"
+
+  - key: how-compelling
+    type: grid
+    prompt: "How compelling do you find each of these objections?"
+    range: 1..5
+    labels:
+      1: "Not at all"
+      5: "Very"
+    items:
+      - { key: demandingness, text: "It asks too much of ordinary people" }
+      - { key: rights, text: "It permits sacrificing an innocent" }
 ```
+
+A `grid` is a poll rather than a quiz: it has no correct answer, and it rates
+several propositions on one shared scale. The slide shows the **mean per
+proposition**, so the room can rank them against each other at a glance. That
+deliberately hides disagreement — an evenly split room and an indifferent one
+both average to the middle — so use it to compare propositions, not to find
+out whether the room agrees with itself.
+
+Students must rate every proposition. A partial grid would give each row a
+different denominator, and nothing on the slide would say so.
 
 Option **keys** are what get recorded, never positions — so you can reorder or
 reword options later without corrupting last year's data.

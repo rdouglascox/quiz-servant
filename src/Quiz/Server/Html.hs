@@ -29,6 +29,7 @@ import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
 import Lucid
+import Text.Printf (printf)
 
 import Quiz.Qr (qrMatrix, qrSvg)
 import Quiz.Store
@@ -101,6 +102,11 @@ bodyFields = \case
       mapM_
         (scaleRow (scaleLabels spec))
         [rangeMin (scaleRange spec) .. rangeMax (scaleRange spec)]
+  BodyGrid spec -> do
+    -- The scale is stated once rather than beside every proposition; the stops
+    -- themselves carry only the number.
+    p_ [class_ "muted"] (toHtml (gridLegend (gridRange spec) (gridLabels spec)))
+    mapM_ (gridItem (gridRange spec)) (gridItems spec)
   where
     -- Signatures are required, not stylistic: lucid's Term class leaves these
     -- ambiguous without them.
@@ -113,6 +119,34 @@ bodyFields = \case
           , value_ (unOptionKey (optionKey option))
           ]
         span_ (toHtml (optionText option))
+    gridLegend :: Range -> Map.Map Int Text -> Text
+    gridLegend (Range lo hi) labels =
+      let end n = tshow n <> maybe "" (" " <>) (Map.lookup n labels)
+       in end lo <> "  \8230  " <> end hi
+
+    gridItem :: Range -> Option -> Html ()
+    gridItem (Range lo hi) item =
+      fieldset_ [class_ "grid-item"] $ do
+        legend_ [class_ "grid-legend"] (toHtml (optionText item))
+        div_ [class_ "grid-scale"] (mapM_ (gridStop item) [lo .. hi])
+
+    -- Radios rather than <input type=range>: a range input always submits a
+    -- value, so a proposition a student never touched is indistinguishable
+    -- from one they deliberately put in the middle — which would drag every
+    -- mean on the slide toward the centre with nothing to show it had
+    -- happened. Radios have a genuine unset state, so `required` can insist.
+    gridStop :: Option -> Int -> Html ()
+    gridStop item n =
+      label_ [class_ "grid-stop"] $ do
+        input_
+          [ type_ "radio"
+          , name_ ("grid-" <> unOptionKey (optionKey item))
+          , value_ (tshow n)
+          , required_ "required"
+          ]
+        span_ [class_ "grid-dot"] mempty
+        span_ [class_ "grid-num"] (toHtml (tshow n))
+
     scaleRow :: Map.Map Int Text -> Int -> Html ()
     scaleRow labels n =
       label_ [class_ "opt"] $ do
@@ -214,6 +248,8 @@ embedResults question phase tally =
         if null shown
           then p_ [class_ "small"] "No answers shown yet."
           else ul_ [class_ "texts"] (mapM_ (li_ . toHtml) shown)
+      TallyGrid rows range _ ->
+        div_ [class_ "bars"] (mapM_ (gridBar range) rows)
 
 optionBar :: Phase -> Question -> Int -> (Option, Int) -> Html ()
 optionBar phase question total (option, n) =
@@ -241,6 +277,30 @@ scaleBar total (label, n) =
     div_ [class_ "fill", style_ ("width:" <> tshow (percent n total) <> "%")] mempty
     span_ [class_ "label"] (toHtml label)
     span_ [class_ "n"] (toHtml (tshow n))
+
+gridBar :: Range -> (Option, Maybe Double) -> Html ()
+gridBar range (item, mMean) =
+  div_ [class_ "bar"] $ do
+    div_
+      [class_ "fill", style_ ("width:" <> tshow (meanPercent range mMean) <> "%")]
+      mempty
+    span_ [class_ "label"] (toHtml (optionText item))
+    span_ [class_ "n"] (toHtml (maybe "\8212" oneDecimal mMean))
+
+-- | Where a mean sits along its own scale, as a percentage. A mean is a
+-- position between the scale's endpoints, not a share of a total, so it is
+-- mapped from the range rather than from a response count — a 1..5 question
+-- whose mean is 3 is half way along, not 60% of anything.
+meanPercent :: Range -> Maybe Double -> Int
+meanPercent (Range lo hi) = \case
+  Nothing -> 0
+  Just m
+    | hi > lo ->
+        max 0 (min 100 (round ((m - fromIntegral lo) / fromIntegral (hi - lo) * 100)))
+    | otherwise -> 0
+
+oneDecimal :: Double -> Text
+oneDecimal m = T.pack (printf "%.1f" m)
 
 correctKeys :: Question -> [OptionKey]
 correctKeys question = case questionBody question of
@@ -278,6 +338,7 @@ embedFragment question phase tally = case tally of
     case [t | (_, t, True) <- rows] of
       [] -> pure ()
       shown -> mapM_ textRow shown
+  TallyGrid rows range _ -> mapM_ (gridRow range) rows
   where
     total = case tally of
       TallyOptions _ n -> n
@@ -306,6 +367,16 @@ embedFragment question phase tally = case tally of
 
     textRow :: Text -> Html ()
     textRow t = tr_ [class_ "quiz-text"] (td_ [colspan_ "2"] (toHtml t))
+
+    -- The bar is the mean's position on the scale and the figure is the mean
+    -- itself, so the column that counts elsewhere reads as an average here.
+    gridRow :: Range -> (Option, Maybe Double) -> Html ()
+    gridRow range (item, mMean) =
+      tr_
+        [class_ "quiz-row", style_ ("--pct:" <> tshow (meanPercent range mMean))]
+        $ do
+          td_ [class_ "quiz-option"] (toHtml (optionText item))
+          td_ [class_ "quiz-count"] (toHtml (maybe "\8212" oneDecimal mMean))
 
 -- | Shown when the slide's quiz is not the one that is live. Same reasoning as
 -- 'embedNotLive', in row form.
@@ -491,6 +562,22 @@ studentCss =
     , ".qlist a { display: block; border: 1px solid #9ca3af; border-radius: .5rem; padding: .9rem .85rem; text-decoration: none; color: inherit; }"
     , ".qlist li.answered a { opacity: .55; }"
     , ".qlist li.answered a::after { content: ' · answered'; opacity: .7; font-size: .85rem; }"
+    , -- A rating grid: dots on a track, so it reads as a slider while staying
+      -- radios underneath (see gridStop for why that distinction matters).
+      ".grid-item { margin: 0 0 1.25rem; }"
+    , ".grid-legend { padding: 0; margin: 0 0 .4rem; font-weight: 600; }"
+    , ".grid-scale { display: flex; align-items: flex-start; position: relative; }"
+    , -- The track the stops sit on. Inset so it runs between the outer dots
+      -- rather than past them.
+      ".grid-scale::before { content: \"\"; position: absolute; left: 10%; right: 10%; top: 1.15rem; height: 2px; background: #9ca3af; }"
+    , ".grid-stop { flex: 1; display: flex; flex-direction: column; align-items: center; gap: .3rem; padding: .5rem 0; cursor: pointer; position: relative; }"
+    , ".grid-stop input { position: absolute; opacity: 0; width: 0; height: 0; }"
+    , -- Canvas is the system background colour, so the dot punches through the
+      -- track in light and dark alike without naming either.
+      ".grid-dot { width: 1.3rem; height: 1.3rem; border-radius: 50%; border: 2px solid #9ca3af; background: Canvas; }"
+    , ".grid-stop:has(input:checked) .grid-dot { background: #1d4ed8; border-color: #1d4ed8; }"
+    , ".grid-num { font-size: .85rem; opacity: .7; }"
+    , ".grid-stop:has(input:checked) .grid-num { opacity: 1; font-weight: 700; }"
     , ".verdict { font-weight: 600; }"
     , ".verdict.good { color: #059669; }"
     , ".verdict.bad { color: #dc2626; }"

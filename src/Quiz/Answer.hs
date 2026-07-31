@@ -20,6 +20,8 @@ data Answer
   | AnswerMulti [OptionKey]
   | AnswerText Text
   | AnswerScale Int
+  | -- | One value per proposition, in the question's own item order.
+    AnswerGrid [(OptionKey, Int)]
   deriving stock (Eq, Show)
 
 instance ToJSON Answer where
@@ -28,6 +30,13 @@ instance ToJSON Answer where
     AnswerMulti ks -> object ["type" .= ("multi" :: Text), "options" .= map unOptionKey ks]
     AnswerText t -> object ["type" .= ("text" :: Text), "text" .= t]
     AnswerScale n -> object ["type" .= ("scale" :: Text), "value" .= n]
+    -- A list of pairs rather than an object: item order is the question's own,
+    -- and a JSON object would neither promise to keep it nor read as ordered.
+    AnswerGrid vs ->
+      object
+        [ "type" .= ("grid" :: Text)
+        , "ratings" .= [object ["item" .= unOptionKey k, "value" .= v] | (k, v) <- vs]
+        ]
 
 instance FromJSON Answer where
   parseJSON = withObject "answer" $ \o -> do
@@ -37,6 +46,12 @@ instance FromJSON Answer where
       "multi" -> AnswerMulti . map OptionKey <$> o .: "options"
       "text" -> AnswerText <$> o .: "text"
       "scale" -> AnswerScale <$> o .: "value"
+      "grid" -> do
+        rows <- o .: "ratings"
+        AnswerGrid
+          <$> traverse
+            (withObject "rating" (\r -> (,) <$> (OptionKey <$> r .: "item") <*> r .: "value"))
+            rows
       _ -> fail ("unknown answer type " <> show ty)
 
 -- | The option keys an answer selected, for tallying.
@@ -80,6 +95,21 @@ checkAnswer body answer = case (body, answer) of
     | n >= rangeMin (scaleRange spec) && n <= rangeMax (scaleRange spec) ->
         Right (AnswerScale n)
     | otherwise -> Left "that is not on the scale"
+  (BodyGrid spec, AnswerGrid given)
+    -- Every proposition must be rated. A partial grid would quietly change
+    -- the denominator per item, so a mean could be over a different set of
+    -- students for each row without anything on the slide saying so.
+    | not (null missing) -> Left "please rate every one"
+    | not (all inRange (map snd given)) -> Left "that is not on the scale"
+    | otherwise -> Right (AnswerGrid ordered)
+    where
+      items = keysOf (gridItems spec)
+      missing = [k | k <- items, k `notElem` map fst given]
+      Range lo hi = gridRange spec
+      inRange v = v >= lo && v <= hi
+      -- Normalised to the question's item order, and unknown keys dropped, so
+      -- what is logged does not depend on how the browser ordered the form.
+      ordered = [(k, v) | k <- items, (k', v) <- given, k == k']
   _ -> Left "that answer does not match the question"
   where
     keysOf = map optionKey

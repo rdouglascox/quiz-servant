@@ -425,6 +425,15 @@ data Tally
     TallyScale [(Int, Int)] Int
   | -- | Each text with its visibility, and the number of responses.
     TallyTexts [(ResponseId, Text, Bool)] Int
+  | -- | Per-proposition mean (Nothing until anyone has rated it), the scale it
+    -- was rated on, and the number of responses.
+    --
+    -- A mean rather than a distribution: the point of a grid is comparing
+    -- propositions against each other, which a row of means does at a glance
+    -- and a wall of histograms does not. The cost is that it hides
+    -- disagreement — an evenly split room and an indifferent one both average
+    -- to the middle.
+    TallyGrid [(Option, Maybe Double)] Range Int
   deriving stock (Eq, Show)
 
 tallyFor :: Question -> [Response] -> Tally
@@ -442,6 +451,11 @@ tallyFor question responses = case questionBody question of
       , AnswerText t <- [responseAnswer r]
       ]
       total
+  BodyGrid spec ->
+    TallyGrid
+      [(item, meanFor (optionKey item)) | item <- gridItems spec]
+      (gridRange spec)
+      total
   where
     answers = map responseAnswer responses
     total = length responses
@@ -450,6 +464,13 @@ tallyFor question responses = case questionBody question of
       TallyOptions
         [(o, length (filter (== optionKey o) chosen)) | o <- options]
         total
+
+    -- Every grid answer rates every item (checkAnswer enforces it), so these
+    -- means always share a denominator — which is what makes comparing rows
+    -- to each other honest.
+    meanFor k = case [v | AnswerGrid vs <- answers, (k', v) <- vs, k' == k] of
+      [] -> Nothing
+      vs -> Just (fromIntegral (sum vs) / fromIntegral (length vs))
 
 -- Random identifiers --------------------------------------------------------
 

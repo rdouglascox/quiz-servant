@@ -35,3 +35,16 @@ questions:
       1: "Not at all"
       3: "Somewhat"
       5: "Very"
+
+  - key: how-compelling
+    type: grid
+    prompt: "How compelling do you find each of these objections to utilitarianism?"
+    range: 1..5
+    labels:
+      1: "Not at all"
+      5: "Very"
+    items:
+      - { key: demandingness, text: "It asks too much of ordinary people" }
+      - { key: integrity, text: "It can require you to betray your own commitments" }
+      - { key: measurement, text: "Welfare cannot really be added up" }
+      - { key: rights, text: "It permits sacrificing an innocent for the greater good" }

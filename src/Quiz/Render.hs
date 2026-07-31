@@ -66,6 +66,13 @@ bodyHtml = \case
   BodyScale ScaleSpec{..} ->
     ul_ [class_ "options"] $
       mapM_ (scaleItem scaleLabels) [rangeMin scaleRange .. rangeMax scaleRange]
+  BodyGrid GridSpec{..} -> do
+    p_ [class_ "meta"] $
+      toHtml ("each rated " <> renderRange gridRange)
+    ul_ [class_ "options"] $
+      mapM_ (optionItem (const False)) gridItems
+    ul_ [class_ "options"] $
+      mapM_ (scaleItem gridLabels) [rangeMin gridRange .. rangeMax gridRange]
 
 optionItem :: (OptionKey -> Bool) -> Option -> Html ()
 optionItem isCorrect Option{..} =

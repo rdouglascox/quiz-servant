@@ -126,6 +126,46 @@ storeSpec = do
     sessionId (stateSession st) `shouldBe` sid
     length (responsesFor choiceKey st) `shouldBe` 1
 
+  it "averages a grid per proposition" $ do
+    (store, sid) <- seeded Nothing
+    must (setPhase store sid gridKey Live)
+    -- P: 1 and 4 -> 2.5.  Q: 5 and 4 -> 4.5.
+    for_ [[("p", 1), ("q", 5)], [("p", 4), ("q", 4)]] $ \rating ->
+      must_
+        ( recordResponse store (epoch 0) sid gridKey $
+            AnswerGrid [(OptionKey k, v) | (k, v) <- rating]
+        )
+    st <- activeOf store
+    case tallyFor (questionNamed gridKey st) (responsesFor gridKey st) of
+      TallyGrid rows range total -> do
+        total `shouldBe` 2
+        range `shouldBe` Range 1 5
+        -- Exactly representable, so an equality check is honest here.
+        map snd rows `shouldBe` [Just 2.5, Just 4.5]
+        map (optionText . fst) rows `shouldBe` ["P", "Q"]
+      other -> expectationFailure ("unexpected tally: " <> show other)
+
+  -- A partial grid would give each proposition a different denominator, so a
+  -- row of means would silently be over different sets of students.
+  it "refuses a grid that leaves a proposition unrated" $ do
+    (store, sid) <- seeded Nothing
+    must (setPhase store sid gridKey Live)
+    result <-
+      recordResponse store (epoch 0) sid gridKey (AnswerGrid [(OptionKey "p", 3)])
+    result `shouldSatisfy` isLeft
+
+  it "refuses a grid rating outside the scale" $ do
+    (store, sid) <- seeded Nothing
+    must (setPhase store sid gridKey Live)
+    result <-
+      recordResponse
+        store
+        (epoch 0)
+        sid
+        gridKey
+        (AnswerGrid [(OptionKey "p", 3), (OptionKey "q", 99)])
+    result `shouldSatisfy` isLeft
+
   -- The property that makes surviving an auto-stop mid-lecture possible.
   it "reconstructs identical state by replaying its log" $
     withTempLog $ \path -> do
@@ -323,16 +363,18 @@ examplesSpec =
       Left err -> expectationFailure err
       Right quiz -> do
         map formatProblem (validateQuiz quiz) `shouldBe` []
-        length (quizQuestions quiz) `shouldBe` 4
+        -- The example is also the fixture that proves every question type
+        -- parses, so it should carry one of each.
         map questionTypeName (map questionBody (quizQuestions quiz))
-          `shouldBe` ["choice", "multi", "text", "scale"]
+          `shouldBe` ["choice", "multi", "text", "scale", "grid"]
 
 -- Store helpers -------------------------------------------------------------
 
-choiceKey, textKey, scaleKey :: QuestionKey
+choiceKey, textKey, scaleKey, gridKey :: QuestionKey
 choiceKey = QuestionKey "a-question"
 textKey = QuestionKey "say-something"
 scaleKey = QuestionKey "how-sure"
+gridKey = QuestionKey "rate-these"
 
 storeQuiz :: Quiz
 storeQuiz =
@@ -349,6 +391,13 @@ storeQuiz =
               )
         , Question textKey "Say something" (BodyText (TextSpec 100))
         , Question scaleKey "How sure?" (BodyScale (ScaleSpec (Range 1 5) mempty))
+        , Question gridKey "Rate these" $
+            BodyGrid
+              ( GridSpec
+                  [Option (OptionKey "p") "P", Option (OptionKey "q") "Q"]
+                  (Range 1 5)
+                  mempty
+              )
         ]
     }
 

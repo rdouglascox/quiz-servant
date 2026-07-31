@@ -13,6 +13,7 @@ module Quiz.Types
   , MultiSpec (..)
   , TextSpec (..)
   , ScaleSpec (..)
+  , GridSpec (..)
   , questionTypeName
   , bodyOptions
   , feedbackName
@@ -62,6 +63,7 @@ data QuestionBody
   | BodyMulti MultiSpec
   | BodyText TextSpec
   | BodyScale ScaleSpec
+  | BodyGrid GridSpec
   deriving stock (Eq, Show)
 
 data Option = Option
@@ -101,6 +103,20 @@ data ScaleSpec = ScaleSpec
   }
   deriving stock (Eq, Show)
 
+-- | One scale, applied to several propositions at once — \"how far do you
+-- agree with each of these\", \"how confident are you in each\". A poll rather
+-- than a quiz: there is no notion of a correct answer.
+--
+-- Items reuse 'Option' because they need exactly what an option needs: a
+-- stable key that responses record, and display text that can be reworded
+-- without invalidating last year's data.
+data GridSpec = GridSpec
+  { gridItems :: [Option]
+  , gridRange :: Range
+  , gridLabels :: Map Int Text
+  }
+  deriving stock (Eq, Show)
+
 -- | The YAML @type:@ discriminator for a body, for use in error messages and
 -- rendering.
 questionTypeName :: QuestionBody -> Text
@@ -109,6 +125,7 @@ questionTypeName = \case
   BodyMulti{} -> "multi"
   BodyText{} -> "text"
   BodyScale{} -> "scale"
+  BodyGrid{} -> "grid"
 
 -- | The options a body offers, empty for types that have none.
 bodyOptions :: QuestionBody -> [Option]
@@ -117,6 +134,7 @@ bodyOptions = \case
   BodyMulti spec -> multiOptions spec
   BodyText{} -> []
   BodyScale{} -> []
+  BodyGrid spec -> gridItems spec
 
 feedbackName :: FeedbackMode -> Text
 feedbackName = \case

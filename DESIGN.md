@@ -328,6 +328,38 @@ offending question.
 | `multi` | Checkboxes, optional `select: 1..3` and `correct: [...]` |
 | `text` | Free text, `max_length:`, always moderated |
 | `scale` | Likert, `range: 1..5`, optional integer-keyed `labels:` |
+| `grid` | One scale applied to several propositions — a poll, not a quiz |
+
+### The grid is a poll, and shows means
+
+A `grid` rates several propositions on one shared scale. It has no notion of a
+correct answer, which is what distinguishes it from everything else here.
+
+**The slide shows a mean per proposition**, mapped along the scale's own
+endpoints rather than as a share of a total: a 1..5 question whose mean is 3 is
+half way along, not 60% of anything. Means make propositions comparable at a
+glance, which is the point — "which of these objections does the room find
+compelling". The cost, stated plainly because it cannot be seen on the slide:
+**a mean hides disagreement.** An evenly split room and a uniformly indifferent
+one both average to the middle.
+
+**Every proposition must be rated.** A partial grid would give each row a
+different denominator, so a column of means would silently be over different
+sets of students, with nothing on screen to say so — the same class of quiet
+dishonesty as counting responses as students.
+
+That requirement is also why the student form is built from radios rather than
+`<input type="range">`, despite a range input being the obvious thing for
+"slide to rate". **A range input always submits a value**, defaulting to the
+midpoint, so a proposition a student never touched is indistinguishable from
+one they deliberately placed in the centre — dragging every mean toward the
+middle invisibly. Radios have a genuine unset state, so `required` can insist,
+and the browser refuses submission with no JavaScript involved. The stops are
+styled as dots on a track so it still reads as a slider.
+
+Items reuse `Option` rather than introducing a parallel `Item` type: they need
+exactly what an option needs — a stable key that responses record, and display
+text that can be reworded without invalidating last year's data.
 
 ## Routes
 

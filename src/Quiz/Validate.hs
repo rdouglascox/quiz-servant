@@ -65,18 +65,31 @@ validateQuestion Question{..} =
           <> maybe [] selectProblems multiSelect
       BodyText TextSpec{..} ->
         [Problem context "max_length must be positive" | textMaxLength <= 0]
-      BodyScale ScaleSpec{..} ->
-        [ Problem context ("range must be increasing, got " <> renderRange scaleRange)
-        | rangeMin scaleRange >= rangeMax scaleRange
-        ]
-          <> [ Problem context ("label " <> tshow n <> " falls outside " <> renderRange scaleRange)
-             | n <- Map.keys scaleLabels
-             , n < rangeMin scaleRange || n > rangeMax scaleRange
-             ]
+      BodyScale ScaleSpec{..} -> scaleProblems scaleRange scaleLabels
+      BodyGrid GridSpec{..} ->
+        -- A grid's items are checked by the same rules as options: they need
+        -- at least two, with distinct keys, for exactly the same reasons.
+        optionProblems <> scaleProblems gridRange gridLabels
+
+    -- Shared by scale and grid, which differ in what is rated, not in how.
+    scaleProblems theRange theLabels =
+      [ Problem context ("range must be increasing, got " <> renderRange theRange)
+      | rangeMin theRange >= rangeMax theRange
+      ]
+        <> [ Problem context ("label " <> tshow n <> " falls outside " <> renderRange theRange)
+           | n <- Map.keys theLabels
+           , n < rangeMin theRange || n > rangeMax theRange
+           ]
+
+    -- A grid rates propositions rather than offering choices, so the same
+    -- checks should not tell its author about "options" they never wrote.
+    noun = case questionBody of
+      BodyGrid{} -> "item"
+      _ -> "option"
 
     optionProblems =
-      [Problem context "must offer at least two options" | length options < 2]
-        <> duplicates context "duplicate option key" optionKeys
+      [Problem context ("must offer at least two " <> noun <> "s") | length options < 2]
+        <> duplicates context ("duplicate " <> noun <> " key") optionKeys
 
     correctMustExist k =
       [ Problem context ("correct answer '" <> unOptionKey k <> "' is not one of the options")

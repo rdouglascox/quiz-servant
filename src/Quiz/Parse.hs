@@ -92,11 +92,17 @@ parseBody ty o = case ty of
       ScaleSpec
         <$> (parseRange =<< o .: "range")
         <*> (maybe (pure Map.empty) parseLabels =<< o .:? "labels")
+  "grid" ->
+    fmap BodyGrid $
+      GridSpec
+        <$> o .: "items"
+        <*> (parseRange =<< o .: "range")
+        <*> (maybe (pure Map.empty) parseLabels =<< o .:? "labels")
   _ ->
     fail $
       "unknown question type "
         <> show ty
-        <> "; expected choice, multi, text, or scale"
+        <> "; expected choice, multi, text, scale, or grid"
 
 defaultTextMaxLength :: Int
 defaultTextMaxLength = 240
@@ -156,6 +162,9 @@ bodyFields = \case
   BodyScale spec ->
     ["range" .= renderRange (scaleRange spec)]
       <> ["labels" .= labelsObject (scaleLabels spec) | not (Map.null (scaleLabels spec))]
+  BodyGrid spec ->
+    ["items" .= gridItems spec, "range" .= renderRange (gridRange spec)]
+      <> ["labels" .= labelsObject (gridLabels spec) | not (Map.null (gridLabels spec))]
 
 renderRange :: Range -> Text
 renderRange (Range lo hi) = T.pack (show lo) <> ".." <> T.pack (show hi)

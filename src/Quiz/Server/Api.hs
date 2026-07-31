@@ -24,7 +24,8 @@ import Data.Text qualified as T
 import Lucid (Html)
 import Servant
 import Servant.HTML.Lucid (HTML)
-import Web.FormUrlEncoded (FromForm (..), parseAll, parseMaybe, parseUnique)
+import Text.Read (readMaybe)
+import Web.FormUrlEncoded (Form, FromForm (..), parseAll, parseMaybe, parseUnique, toListStable)
 
 import Quiz.Answer
 import Quiz.Store (Phase)
@@ -147,6 +148,9 @@ data SubmitForm = SubmitForm
   , submitOptions :: [Text]
   , submitText :: Maybe Text
   , submitScale :: Maybe Int
+  , -- | A grid posts one field per proposition, named @grid-\<item key\>@,
+    -- so its fields cannot be enumerated ahead of time the way the others can.
+    submitGrid :: [(Text, Int)]
   }
 
 instance FromForm SubmitForm where
@@ -157,6 +161,19 @@ instance FromForm SubmitForm where
       <*> parseAll "options" f
       <*> parseMaybe "text" f
       <*> parseMaybe "scale" f
+      <*> pure (gridFields f)
+
+-- | Every @grid-*@ field, with its item key and rating. Unparseable values are
+-- dropped rather than rejected: the resulting answer is then incomplete, and
+-- 'Quiz.Answer.checkAnswer' reports that in the student's own terms instead of
+-- this returning a parser error they cannot act on.
+gridFields :: Form -> [(Text, Int)]
+gridFields f =
+  [ (key, n)
+  | (name, value) <- toListStable f
+  , Just key <- [T.stripPrefix "grid-" name]
+  , Just n <- [readMaybe (T.unpack value)]
+  ]
 
 answerFromForm :: QuestionBody -> SubmitForm -> Either Text Answer
 answerFromForm body form = case body of
@@ -168,6 +185,8 @@ answerFromForm body form = case body of
     maybe (Left "please write something") (Right . AnswerText) (nonEmpty (submitText form))
   BodyScale{} ->
     maybe (Left "please pick a point on the scale") (Right . AnswerScale) (submitScale form)
+  BodyGrid{} ->
+    Right (AnswerGrid [(OptionKey k, v) | (k, v) <- submitGrid form])
   where
     nonEmpty m = do
       t <- m
