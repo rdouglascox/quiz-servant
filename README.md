@@ -438,11 +438,29 @@ quizctl clear
 `clear` asks you to type `clear` to confirm, having first told you how much is
 about to go. `--yes` skips the prompt, for a script or a cron job.
 
-It removes **everything**: every session, every response, and every pushed
-quiz, truncating the log as well as resetting the server's memory. Push your
-quiz again afterwards — which you do before each lecture anyway. Pushed
-quizzes go too because the log is append-only: keeping them would mean
-rewriting history rather than discarding it.
+It leaves the server blank, exactly as if it had just booted for the first
+time. Gone: every pushed quiz, every session — including old ones you could
+otherwise reactivate — every response, and the log itself.
+
+**Nothing local is touched.** Your YAML files are the source of truth and stay
+on your machine, along with any `quizctl pull` copies and your slide decks. So
+recovery is the ritual you run before each lecture anyway:
+
+```bash
+quizctl push examples/ethics-week3.yaml
+quizctl session ethics-week3 --label "2026 S2 W3"
+```
+
+Two things to expect:
+
+- **Every existing join code and presenter link stops working.** A new session
+  means a new code and a new secret. Your decks need no editing, since embed
+  URLs never name a session — but a QR already on screen is stale until you
+  start one.
+- **There is no partial clear.** You cannot drop responses and keep quizzes:
+  the log is append-only, so preserving some events would mean rewriting
+  history rather than discarding it. `push` is idempotent and cheap precisely
+  so this is not a problem.
 
 If you have told students their answers are short-lived, this is the command
 that makes that true. Nothing runs it for you.
