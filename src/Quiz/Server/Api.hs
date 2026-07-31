@@ -114,6 +114,10 @@ type AdminAPI =
     -- unreachable once another supersedes it.
     :<|> "sessions" :> AuthHeader :> Get '[JSON] Value
     :<|> "log" :> AuthHeader :> Get '[PlainText] Text
+    -- Destructive and irreversible: drops every session, response and pushed
+    -- quiz, and truncates the log. There is no other way to remove responses,
+    -- which otherwise accumulate for ever.
+    :<|> "clear" :> AuthHeader :> Post '[JSON] Value
 
 data NewSession = NewSession
   { newSessionQuiz :: Text

@@ -303,7 +303,7 @@ presenterRoutes secret =
 
 adminRoutes :: ServerT AdminAPI AppM
 adminRoutes =
-  pushH :<|> newSessionH :<|> phaseH :<|> stateH :<|> sessionsH :<|> logH
+  pushH :<|> newSessionH :<|> phaseH :<|> stateH :<|> sessionsH :<|> logH :<|> clearH
 
 requireAuth :: Maybe Text -> AppM ()
 requireAuth given = do
@@ -422,6 +422,20 @@ logH auth = do
   case storeLogPath store of
     Nothing -> pure ""
     Just path -> liftIO (TIO.readFile path)
+
+-- | Delete everything. See 'clearAll'; the confirmation belongs to the CLI,
+-- which knows whether a human is watching.
+clearH :: Maybe Text -> AppM Value
+clearH auth = do
+  requireAuth auth
+  store <- asks envStore
+  report <- liftIO (clearAll store)
+  pure $
+    object
+      [ "quizzes" .= clearedQuizzes report
+      , "sessions" .= clearedSessions report
+      , "responses" .= clearedResponses report
+      ]
 
 -- Helpers -------------------------------------------------------------------
 

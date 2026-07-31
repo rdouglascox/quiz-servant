@@ -353,6 +353,7 @@ survive.
 | `status` | The live session and its questions |
 | `sessions` | Every session, with presenter links |
 | `pull [--out FILE]` | Download the response log as JSONL |
+| `clear [--yes]` | **Delete** every session, response and pushed quiz |
 
 Server location and token come from `QUIZ_URL` / `QUIZ_TOKEN`, falling back to
 `~/.config/quizctl/url` and `~/.config/quizctl/token`.
@@ -422,19 +423,29 @@ Consequences worth understanding before you rely on this:
 - **Free text is anonymous and projected**, so it is held back until you
   approve each answer.
 
-**Responses accumulate, and nothing removes them.** They live on a volume that
-survives restarts *and* redeploys. There is no retention policy, no rotation,
-and no command that clears the log — `quizctl pull` only downloads a copy.
+**Nothing expires on its own.** Responses live on a volume that survives
+restarts *and* redeploys, and there is no retention policy or rotation. They
+accumulate across every lecture until you remove them, and `quizctl pull` only
+downloads a copy — it deletes nothing.
 
-So the log grows across every lecture until you delete it yourself:
+To actually remove them:
 
 ```bash
-fly ssh console -a <app> -C "rm /data/responses.jsonl"
+quizctl pull --out week3.jsonl   # keep a copy first; clear cannot be undone
+quizctl clear
 ```
 
-The server recreates it on the next write, and the sessions it described are
-gone from memory on the next restart. If you have told students their answers
-are short-lived, that is currently a promise you keep by hand.
+`clear` asks you to type `clear` to confirm, having first told you how much is
+about to go. `--yes` skips the prompt, for a script or a cron job.
+
+It removes **everything**: every session, every response, and every pushed
+quiz, truncating the log as well as resetting the server's memory. Push your
+quiz again afterwards — which you do before each lecture anyway. Pushed
+quizzes go too because the log is append-only: keeping them would mean
+rewriting history rather than discarding it.
+
+If you have told students their answers are short-lived, this is the command
+that makes that true. Nothing runs it for you.
 
 ---
 

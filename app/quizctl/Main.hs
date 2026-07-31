@@ -20,7 +20,7 @@ import System.Directory (XdgDirectory (XdgConfig), doesFileExist, getXdgDirector
 import System.Environment (lookupEnv)
 import System.Exit (exitFailure)
 import System.FilePath ((</>))
-import System.IO (hPutStrLn, stderr)
+import System.IO (hFlush, hPutStrLn, stderr, stdout)
 
 import Quiz.Client
 import Quiz.Encoding (forceUtf8)
@@ -45,6 +45,7 @@ data Command
   | Status
   | Sessions
   | Pull (Maybe FilePath)
+  | Clear Bool
 
 data ValidateOpts = ValidateOpts
   { validatePath :: FilePath
@@ -114,6 +115,17 @@ commands =
         ( info
             (pure Sessions)
             (progDesc "List every session, with its presenter link")
+        )
+      <> command
+        "clear"
+        ( info
+            ( Clear
+                <$> switch
+                  ( long "yes"
+                      <> help "Do not ask for confirmation"
+                  )
+            )
+            (progDesc "Delete every session, response and pushed quiz")
         )
       <> command
         "pull"
@@ -228,6 +240,41 @@ run = \case
         putStrLn $ "    " <> showBaseUrl base <> "/p/" <> T.unpack (sessionRowSecret r)
       -- The leading marker is the live session; every line's link still works,
       -- which is the point of listing them.
+  Clear assumeYes -> do
+    (remote, base) <- connect
+    -- Show what is about to go before asking, so the confirmation is
+    -- informed rather than ritual.
+    before <- runRemote base (callSessions remote)
+    let sessionCount = maybe 0 length (parseMaybe sessionsReply before)
+    putStrLn $
+      "This deletes every session, response and pushed quiz on "
+        <> showBaseUrl base
+        <> " ("
+        <> show sessionCount
+        <> " session(s)), and truncates the response log."
+    putStrLn "It cannot be undone. Run `quizctl pull` first if you want a copy."
+    ok <-
+      if assumeYes
+        then pure True
+        else do
+          putStr "Type 'clear' to confirm: "
+          hFlush stdout
+          (== "clear") . T.strip <$> TIO.getLine
+    if not ok
+      then putStrLn "nothing was deleted"
+      else do
+        reply <- runRemote base (callClear remote)
+        case parseMaybe clearReply reply of
+          Nothing -> putStrLn "cleared"
+          Just (q, se, r) ->
+            putStrLn $
+              "cleared "
+                <> show r
+                <> " response(s) across "
+                <> show se
+                <> " session(s), and "
+                <> show q
+                <> " pushed quiz(zes)"
   Pull mOut -> do
     (remote, base) <- connect
     contents <- runRemote base (callLog remote)
@@ -322,6 +369,10 @@ sessionsReply = withObject "sessions" $ \o -> do
       <*> s .: "secret"
       <*> s .: "responses"
       <*> s .: "active"
+
+clearReply :: Value -> AT.Parser (Int, Int, Int)
+clearReply = withObject "clear" $ \o ->
+  (,,) <$> o .: "quizzes" <*> o .: "sessions" <*> o .: "responses"
 
 phaseWord :: Phase -> String
 phaseWord = \case

@@ -46,6 +46,8 @@ module Quiz.Store
   , setPhase
   , recordResponse
   , setTextVisible
+  , ClearReport (..)
+  , clearAll
 
     -- * Reading
   , phaseOf
@@ -311,6 +313,45 @@ append store event = case (storeLogLock store, storeLogPath store) of
   _ -> pure ()
 
 -- Operations ----------------------------------------------------------------
+
+data ClearReport = ClearReport
+  { clearedQuizzes :: Int
+  , clearedSessions :: Int
+  , clearedResponses :: Int
+  }
+  deriving stock (Eq, Show)
+
+-- | Throw everything away: in-memory state and the log together.
+--
+-- Not an 'Event', because it is the one operation that is not a state
+-- transition to be replayed — it is the removal of the history itself. Both
+-- halves must go: truncating the log while leaving the world populated would
+-- resurrect nothing on restart but keep serving the old tallies until then,
+-- and resetting the world alone would have the next restart replay everything
+-- straight back.
+--
+-- Pushed quizzes go too. They are not student data, but a quiz is cheap to
+-- push again and selectively rewriting an append-only log to preserve them
+-- would mean editing history — exactly what the replay-equals-live invariant
+-- exists to prevent.
+clearAll :: Store -> IO ClearReport
+clearAll store = do
+  report <- atomically $ do
+    w <- readTVar (storeWorld store)
+    writeTVar (storeWorld store) emptyWorld
+    pure
+      ClearReport
+        { clearedQuizzes = Map.size (worldQuizzes w)
+        , clearedSessions = Map.size (worldSessions w)
+        , clearedResponses =
+            sum (map (length . stateResponses) (Map.elems (worldSessions w)))
+        }
+  case (storeLogLock store, storeLogPath store) of
+    -- Truncate rather than delete, so the file keeps its permissions and the
+    -- next append does not have to recreate it.
+    (Just lock, Just path) -> withMVar lock $ \() -> BS.writeFile path BS.empty
+    _ -> pure ()
+  pure report
 
 pushQuiz :: Store -> UTCTime -> Quiz -> IO (Either Text ())
 pushQuiz store now quiz = apply store $ \_ -> Right ([QuizPushed now quiz], ())

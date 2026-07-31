@@ -76,9 +76,22 @@ Verified rather than assumed: the live log currently holds events from three
 different days spanning several deploys.
 
 If the promise made to students is that responses are short-lived, that promise
-now needs an actual mechanism. Options, none yet built: a `quizctl` command
-that truncates the log, an admin endpoint, or a periodic job. Until then,
-clearing means `fly ssh console` and removing the file by hand.
+needs an actual mechanism. `quizctl clear` (`POST /api/clear`) is it: the one
+operation that deletes rather than appends.
+
+It clears in-memory state and truncates the log **together**, because either
+alone is worse than neither — truncating the log while the world stays
+populated keeps serving stale tallies until the next restart, and resetting the
+world alone has the next restart replay everything back. It is deliberately not
+an `Event`: it is the removal of history, not a transition within it.
+
+Pushed quizzes go too. They are not student data, but selectively preserving
+them would mean rewriting an append-only log, which is exactly what the
+replay-equals-live invariant exists to prevent. Re-pushing is part of the
+pre-lecture ritual regardless.
+
+Still nothing runs it on a schedule; retention remains a decision someone
+makes, not a property of the system.
 
 The no-database decision still stands and still permits:
 

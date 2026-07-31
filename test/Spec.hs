@@ -166,6 +166,27 @@ storeSpec = do
         (AnswerGrid [(OptionKey "p", 3), (OptionKey "q", 99)])
     result `shouldSatisfy` isLeft
 
+  -- Both halves must go together: truncating the log while leaving the world
+  -- populated would keep serving old tallies until the next restart, and
+  -- resetting the world alone would have the next restart replay it all back.
+  it "clears state and log together, leaving nothing to replay" $
+    withTempLog $ \path -> do
+      (store, sid) <- seeded (Just path)
+      must (setPhase store sid choiceKey Live)
+      must_ (recordResponse store (epoch 0) sid choiceKey (AnswerChoice (OptionKey "a")))
+
+      report <- clearAll store
+      clearedResponses report `shouldBe` 1
+      clearedSessions report `shouldBe` 1
+      clearedQuizzes report `shouldBe` 1
+
+      readWorld store `shouldReturn` emptyWorld
+      readFile path `shouldReturn` ""
+
+      (reopened, again) <- openStore (Just path)
+      replayedEvents again `shouldBe` 0
+      readWorld reopened `shouldReturn` emptyWorld
+
   -- The property that makes surviving an auto-stop mid-lecture possible.
   it "reconstructs identical state by replaying its log" $
     withTempLog $ \path -> do
