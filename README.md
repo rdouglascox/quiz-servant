@@ -245,7 +245,8 @@ Afterwards:
 quizctl pull --out week3.jsonl
 ```
 
-**Do this promptly.** The data is not archival; see below.
+Worth doing promptly while the lecture is fresh — though nothing expires on its
+own; see [Data and privacy](#data-and-privacy).
 
 ### Multiple cohorts
 
@@ -421,9 +422,19 @@ Consequences worth understanding before you rely on this:
 - **Free text is anonymous and projected**, so it is held back until you
   approve each answer.
 
-**The data is not archival.** It lives on a small volume and is expected to be
-pulled shortly after the lecture. A redeploy clears it. Treat `quizctl pull` as
-part of packing up.
+**Responses accumulate, and nothing removes them.** They live on a volume that
+survives restarts *and* redeploys. There is no retention policy, no rotation,
+and no command that clears the log — `quizctl pull` only downloads a copy.
+
+So the log grows across every lecture until you delete it yourself:
+
+```bash
+fly ssh console -a <app> -C "rm /data/responses.jsonl"
+```
+
+The server recreates it on the next write, and the sessions it described are
+gone from memory on the next restart. If you have told students their answers
+are short-lived, that is currently a promise you keep by hand.
 
 ---
 

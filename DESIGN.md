@@ -62,10 +62,25 @@ Same implementation as strict one-at-a-time pacing, but it also supports "here
 are three questions, take five minutes", and it degrades sanely if a question
 is left open.
 
-### Data is ephemeral; there is no database
+### There is no database; responses accumulate on a volume
 
-Responses that are not pulled shortly after the lecture are expected to be
-lost. That permits:
+The design began from "responses that are not pulled shortly after the lecture
+are expected to be lost". **That is no longer true, and the drift is worth
+naming**: it was true while the log sat on the machine rootfs, which Fly wipes
+on stop/start. Fixing the mid-lecture data loss (below) meant moving the log
+onto a volume, and a volume survives stop/start *and* redeploys. Responses now
+persist until something deletes them, and nothing does — there is no retention
+policy, no rotation, and no command to clear the log.
+
+Verified rather than assumed: the live log currently holds events from three
+different days spanning several deploys.
+
+If the promise made to students is that responses are short-lived, that promise
+now needs an actual mechanism. Options, none yet built: a `quizctl` command
+that truncates the log, an admin endpoint, or a periodic job. Until then,
+clearing means `fly ssh console` and removing the file by hand.
+
+The no-database decision still stands and still permits:
 
 - **No SQLite and no migrations.** The schema can be reshaped freely and
   redeployed.
@@ -75,8 +90,7 @@ lost. That permits:
   export format** — `quizctl pull` downloads the file, and JSONL drops straight
   into jq, pandas, or R.
 
-The log is not for archival durability. Its job is to survive an auto-stop
-*within* a lecture: pure in-memory state would vanish if the machine idled out
+The log's purpose is to survive an auto-stop *within* a lecture: pure in-memory state would vanish if the machine idled out
 during twenty minutes of non-quiz slides, taking the session and every answer
 so far with it.
 
