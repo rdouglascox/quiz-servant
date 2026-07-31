@@ -218,12 +218,13 @@ run = \case
       Nothing -> die' "server reply was not a session list" ""
       Just [] -> putStrLn "no sessions yet — quizctl session <slug> starts one"
       Just rows -> for_ rows $ \r -> do
+        let n = sessionRowResponses r
         TIO.putStrLn $
           (if sessionIsActive r then "* " else "  ")
             <> T.justifyLeft 7 ' ' (sessionRowCode r)
             <> T.justifyLeft 24 ' ' (sessionRowQuiz r)
             <> T.justifyLeft 22 ' ' (sessionRowLabel r)
-            <> T.pack (show (sessionRowResponses r) <> " responses")
+            <> T.pack (show n <> " response" <> (if n == 1 then "" else "s"))
         putStrLn $ "    " <> showBaseUrl base <> "/p/" <> T.unpack (sessionRowSecret r)
       -- The leading marker is the live session; every line's link still works,
       -- which is the point of listing them.

@@ -29,47 +29,80 @@ for — see [DESIGN.md](DESIGN.md).
 
 ## Quick start
 
-Requires GHC 9.10.3 and stack (snapshot `lts-24.12`), and pandoc if you want
+You can run the whole thing on your laptop — no account, no hosting, nothing to
+pay for. Deploying comes later, and only when you want students on their own
+phones.
+
+Requires GHC 9.10.3 and stack (snapshot `lts-24.12`); pandoc too, if you want
 slides.
 
 ```bash
-stack build
+stack install
 ```
 
-Point the CLI at your server. Either environment variables:
+`stack install` rather than `stack build`, so `quizctl` and `quiz-servant` land
+on your `PATH`. **If you rebuild after changing anything, run it again** — a
+stale `quizctl` fails in confusing ways, typically by rejecting a question type
+it is too old to know about.
+
+### 1. Write and check a quiz
+
+`validate` needs no server, so this works before anything is running:
 
 ```bash
-export QUIZ_URL=https://quiz-servant.fly.dev
-export QUIZ_TOKEN=…
+quizctl validate examples/ethics-week3.yaml
 ```
 
-or files, which is easier to live with:
+It reports *every* problem at once rather than stopping at the first. Add
+`--html preview.html` to eyeball the questions in a browser.
+
+### 2. Start a server
+
+In its own terminal:
+
+```bash
+QUIZ_ADMIN_TOKEN=dev \
+QUIZ_LOG=/tmp/quiz.jsonl \
+QUIZ_BASE_URL=http://localhost:8080 \
+  quiz-servant
+```
+
+### 3. Point the CLI at it
+
+```bash
+export QUIZ_URL=http://localhost:8080
+export QUIZ_TOKEN=dev
+```
+
+For a real deployment, put these in files instead so every shell picks them up:
 
 ```bash
 mkdir -p ~/.config/quizctl
-echo "https://quiz-servant.fly.dev" > ~/.config/quizctl/url
-echo "<the admin token>" > ~/.config/quizctl/token
+echo "https://your-app.fly.dev" > ~/.config/quizctl/url
+echo "<the admin token>"        > ~/.config/quizctl/token
 chmod 600 ~/.config/quizctl/token
 ```
 
-Then:
+### 4. Run a quiz
 
 ```bash
-quizctl validate examples/ethics-week3.yaml   # check it locally
-quizctl push examples/ethics-week3.yaml       # send it to the server
+quizctl push examples/ethics-week3.yaml
 quizctl session ethics-week3 --label "2026 S2 W3"
 ```
 
-That last command prints everything you need for the lecture: the join code,
-the student URL, the slide URL, your presenter link, and a QR code you can
-scan straight from the terminal to check the join flow before class.
+That prints everything the lecture needs: the join code, the student URL, the
+slide URL, your presenter link, and a QR code you can scan **straight from the
+terminal** to check the join flow before class.
 
-To try it without deploying anything, run the server locally:
+Open the presenter link, press **Open** on a question, and answer it yourself
+at the student URL. Then:
 
 ```bash
-QUIZ_ADMIN_TOKEN=dev QUIZ_LOG=/tmp/quiz.jsonl QUIZ_BASE_URL=http://localhost:8080 \
-  stack exec quiz-servant
+quizctl pull --out week3.jsonl
 ```
+
+When you want students on their own phones rather than just your laptop, see
+[Deploying](#deploying).
 
 ---
 
@@ -179,12 +212,14 @@ doubles as your fallback if the server is unreachable mid-lecture.
 Before class:
 
 ```bash
-fly status                     # confirm exactly one machine — see Deploying
+fly status                     # deployed only: confirm exactly one machine
 quizctl push slides/ethics-week3.yaml
 quizctl session ethics-week3 --label "2026 S2 W3"
 ```
 
-This also wakes the server, so no student meets a cold start (~1.4s).
+The `push` also wakes a sleeping server, so no student meets a cold start
+(~1.4s). Skip the `fly status` line when running locally — but do not skip it
+when deployed; see [the two rules](#two-rules).
 
 During class, drive it from the **presenter page** — the secret URL printed by
 `session`. It has one obvious control per question: Open, Close, Reveal answer,
@@ -394,6 +429,10 @@ part of packing up.
 
 ## Troubleshooting
 
+**A command fails in a way that makes no sense** — a question type "expected
+choice, multi, text, or scale", or `sessions` reported as an unknown command.
+Your installed `quizctl` is older than your checkout. Run `stack install`.
+
 **Students see "Nothing running."** No session is live, or the join code is
 from an older one. `quizctl status`.
 
@@ -406,6 +445,9 @@ only starts once the panel is revealed. If it persists after that, run
 `tools/embed-check.html` on that machine.
 
 **Tallies look wrong or too low.** Check `fly status` for a second machine.
+
+**A student says "please rate every one."** A `grid` requires every
+proposition to be rated — see [Question types](#question-types) for why.
 
 **"That form did not come from this server."** The admin token changed, which
 invalidates outstanding form tokens. Students need only reload.
