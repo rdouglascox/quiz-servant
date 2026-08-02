@@ -336,6 +336,34 @@ external request.
 the server sets — which you can edit or delete. The server sends structure and
 numbers only.
 
+### Building a deck without the server
+
+Two more filters produce variants of the same Markdown, so a deck and its
+backup can never drift apart:
+
+```bash
+make offline QUIZ=my-quiz.yaml   # questions printed on the slides
+make noquiz                      # quiz panels removed entirely
+```
+
+**`offline` is the fallback for when the network fails.** Each panel becomes
+the question itself — prompt, options, and how to answer — so you can carry on
+in the same deck by show of hands. The joining panel disappears, since there
+is nothing to join. The questions come from the quiz YAML, which pandoc parses
+for you via `--metadata-file`, so the filter needs no YAML parser of its own.
+
+Build it **whenever you change a quiz, not when you need it**: the point is
+that it already exists on the morning nothing works. `make offline` looks for
+`slides/<name>.yaml` beside the deck, or pass `QUIZ=` for a one-off.
+
+**`noquiz` just removes the panels**, for handing slides out afterwards or
+printing them, where a panel reading "Waiting for responses…" for ever is
+worse than no panel. It leaves the surrounding prose alone, so a sentence
+introducing a question survives — read the result before circulating it.
+
+Both write beside the live deck as `<name>.offline.html` and
+`<name>.noquiz.html`; `make all-decks` builds all three.
+
 ### If your deck cannot run JavaScript
 
 `GET /embed/<slug>/<question>` returns a whole page suitable for an `<iframe>`,
