@@ -538,7 +538,13 @@ studentCss =
     -- the opposite — see 'embedCss'.
     [ ":root { color-scheme: light dark; }"
     , "* { box-sizing: border-box; }"
-    , "body { font: 17px/1.5 system-ui, sans-serif; margin: 0 auto; padding: 1.25rem; max-width: 32rem; }"
+    , -- No font-family, deliberately. minpressive's basic template does not
+      -- name one either, so the deck renders in the browser's default serif;
+      -- declining to choose here means the two match by construction, in
+      -- whatever browser, without either side hardcoding a typeface. Size and
+      -- line height are still set: 16px default is a little tight to read on a
+      -- phone held at arm's length in a dark room.
+      "body { font-size: 17px; line-height: 1.5; margin: 0 auto; padding: 1.25rem; max-width: 32rem; }"
     , "h1 { font-size: 1.3rem; margin: 0 0 1rem; }"
     , ".muted { opacity: .7; font-size: .9rem; }"
     , ".wait { font-size: 1.1rem; margin: 2rem 0 .5rem; }"

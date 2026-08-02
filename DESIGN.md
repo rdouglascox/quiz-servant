@@ -161,6 +161,19 @@ laptop, in a dark room, in a hurry. Large tap targets with the whole row as the
 label, an obvious selected state, visible focus rings for keyboard users, and a
 readable measure.
 
+They name **no font-family**, though, and that is the one place the two
+audiences deliberately agree. minpressive's basic template names none either,
+so a deck renders in the browser's default serif; by also declining to choose,
+the student page matches it *by construction* — in whatever browser, on
+whatever platform, without either side hardcoding a typeface that the other
+would have to be kept in step with. Verified by reading computed styles from
+both: each resolves to the same family as a bare unstyled element.
+
+Size and line height are still set. The browser default of 16px is a little
+tight on a phone held at arm's length in a dark theatre, and unlike family it
+is not something the deck and the phone should share — they are read from very
+different distances.
+
 **Slide embeds set no fonts, sizes, or colours.** The deck owns presentation
 entirely; the server sends structure and numbers.
 
