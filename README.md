@@ -108,6 +108,18 @@ When you want students on their own phones rather than just your laptop, see
 
 ## Writing a quiz
 
+Start from [`quiz_template.yaml`](quiz_template.yaml), which carries a
+commented-out example of every question type with notes on each:
+
+```bash
+cp quiz_template.yaml phil201-week3.yaml
+```
+
+It is a valid one-question quiz as it stands, so you can `validate` and `push`
+it immediately to see the tooling work, then uncomment whichever types you
+need. For a complete quiz with nothing commented out, see
+[`examples/ethics-week3.yaml`](examples/ethics-week3.yaml).
+
 A quiz is one YAML file. It is the source of truth: nothing is ever edited on
 the server, and pushing the same file twice is harmless.
 

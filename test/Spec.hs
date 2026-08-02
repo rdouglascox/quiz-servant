@@ -1,6 +1,7 @@
 module Main (main) where
 
 import Data.ByteString (ByteString)
+import Data.Char (isAsciiLower, isDigit)
 import Control.Monad (void)
 import Data.Either (isLeft)
 import Data.Foldable (for_)
@@ -377,7 +378,29 @@ validationSpec = do
     problemsShouldMention quiz "must match"
 
 examplesSpec :: Spec
-examplesSpec =
+examplesSpec = do
+  -- The template is meant to be copied and edited, so it must be a working
+  -- quiz as shipped rather than only after the reader fixes it.
+  it "ships quiz_template.yaml as a valid quiz" $ do
+    parsed <- loadQuizFile "quiz_template.yaml"
+    case parsed of
+      Left err -> expectationFailure err
+      Right quiz -> map formatProblem (validateQuiz quiz) `shouldBe` []
+
+  -- The point of the template is the commented-out blocks, which nothing
+  -- would otherwise check: they can drift out of step with the parser and
+  -- stay wrong until someone copies one and it fails on them.
+  it "offers commented-out blocks that are valid once uncommented" $ do
+    raw <- readFile "quiz_template.yaml"
+    let uncommented = unlines (map uncomment (lines raw))
+    case decodeQuiz (TE.encodeUtf8 (T.pack uncommented)) of
+      Left err -> expectationFailure ("uncommented template does not parse:\n" <> err)
+      Right quiz -> do
+        map formatProblem (validateQuiz quiz) `shouldBe` []
+        -- Every type the tool supports should be there to copy.
+        map (questionTypeName . questionBody) (quizQuestions quiz)
+          `shouldBe` ["choice", "multi", "text", "scale", "grid"]
+
   it "parses and validates examples/ethics-week3.yaml" $ do
     parsed <- loadQuizFile "examples/ethics-week3.yaml"
     case parsed of
@@ -388,6 +411,39 @@ examplesSpec =
         -- parses, so it should carry one of each.
         map questionTypeName (map questionBody (quizQuestions quiz))
           `shouldBe` ["choice", "multi", "text", "scale", "grid"]
+
+-- | Strip the comment marker from a commented-out YAML line, leaving prose
+-- comments alone.
+--
+-- The distinction has to be made on shape, because the template uses ordinary
+-- @#@ comments for both — anything else would make it awkward for a reader to
+-- uncomment a block with their editor. A line counts as commented-out YAML
+-- when the @#@ is the first non-space character and what follows begins like
+-- YAML: a list item, an inline map, or a bare @key:@.
+--
+-- \"Bare\" is doing real work there. Prose in this template says things like
+-- @`select:` constrains how many...@, and a looser test that accepted any
+-- early colon would uncomment that sentence into a line starting with a
+-- backtick, which is not valid YAML at all.
+uncomment :: String -> String
+uncomment line = case break (== '#') line of
+  (indent, '#' : rest)
+    | all (== ' ') indent
+    , looksLikeYaml (dropWhile (== ' ') rest) ->
+        indent <> dropOneSpace rest
+  _ -> line
+  where
+    -- Exactly one space, so the block's own indentation survives.
+    dropOneSpace (' ' : r) = r
+    dropOneSpace r = r
+
+    looksLikeYaml r = take 2 r == "- " || take 1 r == "{" || isBareKey r
+
+    isBareKey r = case break (== ':') r of
+      (k, ':' : _) -> not (null k) && all keyChar k
+      _ -> False
+
+    keyChar c = isAsciiLower c || isDigit c || c == '_' || c == '-'
 
 -- Store helpers -------------------------------------------------------------
 

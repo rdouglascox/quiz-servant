@@ -1,0 +1,128 @@
+# quiz-servant — quiz template
+#
+# Copy this to a file of your own, edit the header, and uncomment whichever
+# question types you need:
+#
+#     cp quiz_template.yaml phil201-week3.yaml
+#     quizctl validate phil201-week3.yaml
+#     quizctl push phil201-week3.yaml
+#
+# As written, this file is a valid one-question quiz — validate it straight
+# away if you want to see the tooling work before editing anything.
+#
+# See README.md for running a lecture, and examples/ethics-week3.yaml for a
+# complete quiz using all five question types with nothing commented out.
+
+# ---------------------------------------------------------------------------
+# Header
+# ---------------------------------------------------------------------------
+
+# The slug. Appears in your slide URLs, so changing it later means editing
+# every deck that embeds this quiz. Must match [a-z0-9-]+.
+quiz: my-quiz
+
+# Shown to students at the top of their page.
+title: "Week N — Topic"
+
+# Whether students learn if they were right, and when:
+#
+#   none         never say
+#   after_close  once you close the question (the default; discuss first)
+#   immediate    as soon as they answer
+#
+# Only affects question types that have a `correct:` — a poll cannot be wrong.
+feedback: after_close
+
+questions:
+  # -------------------------------------------------------------------------
+  # Every question needs `key`, `type` and `prompt`.
+  #
+  # `key` must match [a-z0-9-]+ and is what your slides refer to, so treat it
+  # as permanent — renaming it breaks any deck already embedding it. `join` is
+  # reserved; the joining panel occupies that path.
+  # -------------------------------------------------------------------------
+
+  # --- choice: pick one -----------------------------------------------------
+  #
+  # The workhorse. Option `key`s are what get recorded, never positions, so you
+  # can reorder or reword options next year without corrupting this year's
+  # data. `correct:` is optional — leave it out for an opinion poll.
+  - key: an-example-question
+    type: choice
+    prompt: "Which of these do you find most persuasive?"
+    correct: first
+    options:
+      - { key: first,  text: "The first option" }
+      - { key: second, text: "The second option" }
+      - { key: unsure, text: "I don't know" }
+
+  # --- multi: pick several --------------------------------------------------
+  #
+  # `select:` constrains how many may be chosen, as a range. Omit it and any
+  # non-empty selection is accepted. `correct:` is a list; the slide outlines
+  # every correct option when you reveal.
+  #
+  # - key: which-are-consequentialist
+  #   type: multi
+  #   prompt: "Which of these claims are consequentialist?"
+  #   select: 1..3
+  #   correct: [outcomes, aggregate]
+  #   options:
+  #     - { key: outcomes,  text: "An act is right if it produces the best outcome" }
+  #     - { key: duty,      text: "Some acts are wrong whatever their effects" }
+  #     - { key: aggregate, text: "We should maximise total welfare" }
+  #     - { key: virtue,    text: "The right act is what a virtuous person would do" }
+
+  # --- text: free writing ---------------------------------------------------
+  #
+  # Always moderated: answers are anonymous, so nothing reaches the projector
+  # until you approve it one by one from the presenter page. Until you approve
+  # something, the slide shows your placeholder rather than going blank.
+  #
+  # `max_length` defaults to 240. Keep it short — these are read aloud.
+  #
+  # - key: define-utility
+  #   type: text
+  #   prompt: "In one sentence, what does 'utility' mean here?"
+  #   max_length: 200
+
+  # --- scale: rate one thing ------------------------------------------------
+  #
+  # A Likert scale. `labels:` are optional and keyed by number; label at least
+  # the endpoints, or neither you nor the room can tell which end is which.
+  # Unlabelled points show as bare numbers.
+  #
+  # - key: confidence
+  #   type: scale
+  #   prompt: "How confident are you that you could defend your answer?"
+  #   range: 1..5
+  #   labels:
+  #     1: "Not at all"
+  #     3: "Somewhat"
+  #     5: "Very"
+
+  # --- grid: rate several things on one scale -------------------------------
+  #
+  # A poll, not a quiz: there is no correct answer. Use it to compare
+  # propositions against each other — "which of these objections lands?".
+  #
+  # The slide shows the MEAN per proposition, which makes them comparable at a
+  # glance but hides disagreement: an evenly split room and an indifferent one
+  # both average to the middle. If you need to see the split, ask a `scale`
+  # question about the one proposition instead.
+  #
+  # Students must rate every item before they can submit. Keep the list short —
+  # four or five is plenty on a phone.
+  #
+  # - key: how-compelling
+  #   type: grid
+  #   prompt: "How compelling do you find each of these objections?"
+  #   range: 1..5
+  #   labels:
+  #     1: "Not at all"
+  #     5: "Very"
+  #   items:
+  #     - { key: demandingness, text: "It asks too much of ordinary people" }
+  #     - { key: integrity,     text: "It can require you to betray your commitments" }
+  #     - { key: measurement,   text: "Welfare cannot really be added up" }
+  #     - { key: rights,        text: "It permits sacrificing an innocent" }
