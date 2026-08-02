@@ -11,15 +11,25 @@
 --
 -- (`make offline` does this for every slides/*.md.)
 --
--- The questions come from the quiz YAML by way of --metadata-file: pandoc
--- parses it into document metadata, so this filter needs no YAML parser of its
--- own. The deck's own metadata wins any clash, so its `title:` survives the
--- quiz file's.
+-- Questions written into the deck as ```quiz fences are read straight from the
+-- fence. Panels placed by reference — ::: {.quiz question=key} — need the quiz
+-- passed with --metadata-file, since the question is defined elsewhere.
+--
+-- Either way pandoc does the YAML parsing: a Lua filter has none of its own,
+-- but front matter can be handed back to pandoc.read. The deck's own metadata
+-- wins any clash, so its `title:` survives the quiz file's.
 --
 -- **Build this whenever you change a quiz, not when you need it.** Its whole
 -- purpose is to exist already on the morning the network does not.
 
 local utils = pandoc.utils
+
+-- Parse a fence's YAML by wrapping it as front matter and reading it back.
+local function fenceMeta(text)
+  local ok, doc = pcall(pandoc.read, '---\n' .. text .. '\n---\n', 'markdown')
+  if not ok then return nil end
+  return doc.meta
+end
 
 -- Metadata values arrive as inline lists, plain strings, or numbers depending
 -- on how they were written in the YAML. Normalise to inlines so a prompt that
@@ -116,6 +126,16 @@ function Pandoc(doc)
   end
 
   local blocks = doc.blocks:walk {
+    -- A question defined where it is shown.
+    CodeBlock = function(el)
+      if not el.classes:includes('quiz') then return nil end
+      local q = fenceMeta(el.text)
+      if q and q.key then return render(q) end
+      io.stderr:write('quiz-offline.lua: could not read a ```quiz fence\n')
+      return note('[unreadable question]')
+    end,
+
+    -- A panel placed by reference, resolved against --metadata-file.
     Div = function(el)
       if not el.classes:includes('quiz') then return nil end
 

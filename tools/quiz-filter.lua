@@ -22,8 +22,42 @@
 -- tools/quiz-embed.html and DESIGN.md for why the container must be a
 -- <table> rather than a <div>.
 
+-- Parse the YAML in a fence by handing it back to pandoc as front matter.
+-- A Lua filter has no YAML parser of its own, but pandoc does, and this is the
+-- only way to reach it from here.
+local function fence_meta(text)
+  local ok, doc = pcall(pandoc.read, '---\n' .. text .. '\n---\n', 'markdown')
+  if not ok then return nil end
+  return doc.meta
+end
+
 local function escape_html(s)
   return (s:gsub('&', '&amp;'):gsub('<', '&lt;'):gsub('>', '&gt;'))
+end
+
+-- ```quiz fences define the question where it is shown, so the deck and the
+-- quiz cannot drift apart. The placeholder is ours rather than the author's,
+-- since the fence body is the question itself.
+function CodeBlock(el)
+  if not el.classes:includes('quiz') then
+    return nil
+  end
+
+  local meta = fence_meta(el.text)
+  local question = meta and meta.key and pandoc.utils.stringify(meta.key) or nil
+  if not question or question == '' then
+    io.stderr:write(
+      "quiz-filter.lua: a ```quiz fence has no `key:` — cannot place its panel\n"
+    )
+    return nil
+  end
+
+  return pandoc.RawBlock(
+    'html',
+    '<table data-quiz="' .. question .. '"><tbody>'
+      .. '<tr><td>Waiting for responses…</td></tr>'
+      .. '</tbody></table>'
+  )
 end
 
 function Div(el)

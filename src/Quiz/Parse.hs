@@ -12,29 +12,127 @@
 module Quiz.Parse
   ( loadQuizFile
   , decodeQuiz
+  , decodeQuizMarkdown
   ) where
 
 import Data.Aeson
 import Data.Aeson.Key qualified as K
 import Data.Aeson.KeyMap qualified as KM
-import Data.Aeson.Types (Pair, Parser, prependFailure, typeMismatch)
+import Data.Aeson.Types (Pair, Parser, parseEither, prependFailure, typeMismatch)
 import Data.Bifunctor (first)
 import Data.ByteString (ByteString)
+import Data.ByteString qualified as BS
+import Data.Char (toLower)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text.Encoding qualified as TE
 import Data.Yaml qualified as Yaml
+import System.FilePath (takeExtension)
 import Text.Read (readMaybe)
 
 import Quiz.Types
 
--- | Read and decode a quiz file. Syntax and schema errors come back as a
--- human-readable string, ready to print.
+-- | Read and decode a quiz, from either a standalone YAML file or a Markdown
+-- deck with the questions written into it. Syntax and schema errors come back
+-- as a human-readable string, ready to print.
+--
+-- Dispatching on the extension rather than sniffing the contents: a @.md@ that
+-- is missing its front matter should be reported as a broken deck, not
+-- silently retried as YAML and reported as something stranger.
 loadQuizFile :: FilePath -> IO (Either String Quiz)
-loadQuizFile fp = first Yaml.prettyPrintParseException <$> Yaml.decodeFileEither fp
+loadQuizFile fp = decode <$> BS.readFile fp
+  where
+    decode
+      | map toLower (takeExtension fp) `elem` [".md", ".markdown"] = decodeQuizMarkdown
+      | otherwise = decodeQuiz
 
 decodeQuiz :: ByteString -> Either String Quiz
 decodeQuiz = first Yaml.prettyPrintParseException . Yaml.decodeEither'
+
+-- | Read a quiz out of a Markdown deck.
+--
+-- The front matter supplies the header — @quiz@, @title@, @feedback@ — and
+-- each fenced @quiz@ block is one question, in document order. Keeping both in
+-- the deck is what stops a quiz and the slides that present it drifting apart:
+-- with them in separate files you can push last year's questions under this
+-- year's deck and nothing anywhere notices, because the keys still resolve.
+--
+-- Other front-matter keys are ignored, so a deck's @author@, @date@ and
+-- @header-includes@ are none of our business.
+decodeQuizMarkdown :: ByteString -> Either String Quiz
+decodeQuizMarkdown raw = do
+  txt <- first (const "not valid UTF-8") (TE.decodeUtf8' raw)
+  let ls = T.lines txt
+  header <- frontMatter ls
+  questions <- traverse questionBlock (zip [1 :: Int ..] (quizFences ls))
+  fields <- case header of
+    Object o -> Right o
+    _ -> Left "the front matter is not a mapping"
+  first ("in this deck: " <>) $
+    parseEither parseJSON (Object (KM.insert "questions" (toJSON questions) fields))
+
+-- | The YAML between the opening @---@ and the next @---@ (or @...@).
+frontMatter :: [Text] -> Either String Value
+frontMatter ls = case ls of
+  (opening : rest)
+    | T.strip opening == "---" ->
+        case break closes rest of
+          (body, _ : _) -> first ("in the front matter:\n" <>) (decodeYamlValue (T.unlines body))
+          _ -> Left "the front matter is never closed — expected a second --- line"
+  _ ->
+    Left
+      "expected YAML front matter at the top of the file: a --- line, then quiz/title/feedback, then another ---"
+  where
+    closes l = T.strip l `elem` ["---", "..."]
+
+questionBlock :: (Int, Text) -> Either String Value
+questionBlock (n, body) =
+  first (\e -> "in quiz block " <> show n <> ":\n" <> e) (decodeYamlValue body)
+
+decodeYamlValue :: Text -> Either String Value
+decodeYamlValue =
+  first Yaml.prettyPrintParseException . Yaml.decodeEither' . TE.encodeUtf8
+
+-- | The body of every fenced block marked as a quiz, in document order.
+quizFences :: [Text] -> [Text]
+quizFences = go
+  where
+    go [] = []
+    go (l : rest) = case opensQuiz l of
+      Just indent ->
+        let (body, after) = break closesFence rest
+         in T.unlines (map (unindent indent) body) : go (drop 1 after)
+      Nothing -> go rest
+
+-- | Does this line open a quiz fence, and at what indent? Accepts both the
+-- bare @```quiz@ and pandoc's attribute form, in either class order, since
+-- @```{.yaml .quiz}@ is what gets you YAML highlighting in an editor.
+opensQuiz :: Text -> Maybe Int
+opensQuiz line
+  | T.length spaces <= 3
+  , "```" `T.isPrefixOf` rest
+  , isQuiz (T.dropWhile (== '`') rest) =
+      Just (T.length spaces)
+  | otherwise = Nothing
+  where
+    (spaces, rest) = T.span (== ' ') line
+    isQuiz info =
+      let inner = T.dropWhileEnd (== '}') (T.dropWhile (== '{') (T.strip info))
+          classes = T.words (T.map (\c -> if c == ',' then ' ' else c) inner)
+       in "quiz" `elem` map (T.dropWhile (== '.')) classes
+
+closesFence :: Text -> Bool
+closesFence line = T.length stripped >= 3 && T.all (== '`') stripped
+  where
+    stripped = T.strip line
+
+-- | Remove the fence's own indentation from a body line, so an indented block
+-- still yields YAML that starts at column zero.
+unindent :: Int -> Text -> Text
+unindent n line = T.replicate (max 0 (T.length spaces - n)) " " <> rest
+  where
+    (spaces, rest) = T.span (== ' ') line
 
 instance FromJSON Quiz where
   parseJSON = withObject "quiz" $ \o -> do

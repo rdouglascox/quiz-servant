@@ -15,8 +15,16 @@
 -- See tools/quiz-offline.lua for the other direction: keeping the questions
 -- but printing them on the slide instead of polling for answers.
 
+-- A question written into the deck as a ```quiz fence.
+function CodeBlock(el)
+  if el.classes:includes('quiz') then
+    return {}
+  end
+end
+
+-- A panel placed by reference, for a question defined elsewhere.
 function Div(el)
   if el.classes:includes('quiz') then
-    return {} -- drop the block entirely
+    return {}
   end
 end

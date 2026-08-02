@@ -219,6 +219,38 @@ Three details that are load-bearing rather than cosmetic:
 `join` is a reserved question key — the join panel occupies that path.
 `Quiz.Validate` rejects it rather than letting it silently shadow.
 
+### A quiz can live in the deck that presents it
+
+`quizctl` reads either a standalone `.yaml` or a Markdown deck whose front
+matter carries the header and whose fenced `quiz` blocks are the questions, in
+document order.
+
+The motivation is not authoring convenience but **drift**. With the quiz in a
+separate file, pushing last year's questions under this year's deck fails
+silently in the worst way: every key still resolves, every panel still fills,
+and the tallies are answers to questions nobody was asked. That is the same
+shape as the split-brain and the rootfs claim — wrong, and indistinguishable
+from right. Writing the question where it is asked makes it unrepresentable.
+
+It also deletes the `question=key` indirection and its entire error class, and
+lets `quiz-offline.lua` work with no quiz file at all.
+
+Deliberately **no extraction artifact**. An intermediate `.yaml` generated from
+the deck would be one more thing that can go stale or disagree with the file
+beside it, which is what this change exists to prevent. `quizctl` parses the
+Markdown itself: the front matter is already YAML, the fences are
+line-delimited, and both go through the same `FromJSON Quiz` as before — so
+error messages, validation, and every question type are shared rather than
+reimplemented. A test asserts the two front ends produce the identical `Quiz`.
+
+The Lua filters parse fence YAML by wrapping it in `---` delimiters and handing
+it back to `pandoc.read`. A filter has no YAML parser of its own, but pandoc
+does, and that is the only way to reach it from Lua.
+
+Standalone `.yaml` stays supported rather than being migrated away: a quiz used
+by more than one deck has nowhere else to live, and it can be validated without
+a deck. Both paths are exercised by the examples and the test suite.
+
 ### A Lua filter removes the boilerplate
 
 `tools/quiz-filter.lua` turns

@@ -340,10 +340,13 @@ embedFragment question phase tally = case tally of
       shown -> mapM_ textRow shown
   TallyGrid rows range _ -> mapM_ (gridRow range) rows
   where
+    -- Only the count-based rows divide by this; a grid's bar is a position on
+    -- its scale, not a share of a total, so it never reaches here.
     total = case tally of
       TallyOptions _ n -> n
       TallyScale _ n -> n
       TallyTexts _ n -> n
+      TallyGrid _ _ n -> n
 
     optionRow :: (Option, Int) -> Html ()
     optionRow (option, n) =

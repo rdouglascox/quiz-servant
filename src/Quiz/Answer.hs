@@ -61,6 +61,9 @@ answerOptions = \case
   AnswerMulti ks -> ks
   AnswerText{} -> []
   AnswerScale{} -> []
+  -- A grid rates every item rather than selecting among them, so there is
+  -- nothing here to count towards per-option tallies.
+  AnswerGrid{} -> []
 
 -- | Validate an answer against the question it claims to answer, normalising
 -- it on the way through (text is stripped, multi-selections deduplicated and

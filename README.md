@@ -120,8 +120,49 @@ it immediately to see the tooling work, then uncomment whichever types you
 need. For a complete quiz with nothing commented out, see
 [`examples/ethics-week3.yaml`](examples/ethics-week3.yaml).
 
-A quiz is one YAML file. It is the source of truth: nothing is ever edited on
-the server, and pushing the same file twice is harmless.
+### Two places a quiz can live
+
+**In the deck** — recommended. Front matter carries the header; each fenced
+`quiz` block is one question, where it is asked:
+
+````markdown
+---
+quiz: ethics-week4
+title: "Week 4 — Rights and constraints"
+feedback: after_close
+---
+
+# The transplant surgeon
+
+A surgeon has five patients who will each die without a different organ…
+
+```quiz
+key: transplant
+type: choice
+prompt: "Should the surgeon operate?"
+options:
+  - { key: operate, text: "Yes — five lives outweigh one" }
+  - { key: refrain, text: "No" }
+```
+````
+
+Then `quizctl push slides/ethics-week4.md` — it reads the deck directly, with
+no extraction step and no generated file to go stale. See
+[`slides/ethics-week4.md`](slides/ethics-week4.md).
+
+**Why this is the better default:** with the quiz in a separate file you can
+push last year's questions under this year's deck and *nothing anywhere
+notices* — the keys still resolve, the panels still fill, the numbers are just
+answers to different questions. Writing them together makes that impossible.
+It also means `make offline` needs no quiz file at all.
+
+**In a standalone `.yaml`** — still fully supported, and the right choice if a
+quiz is used by more than one deck, or you want to validate it without one.
+Place its panels with `::: {.quiz question=trolley}` and pass the file where
+needed. See [`examples/ethics-week3.yaml`](examples/ethics-week3.yaml).
+
+Either way it is the source of truth: nothing is ever edited on the server, and
+pushing the same file twice is harmless.
 
 ```yaml
 quiz: ethics-week3          # stable slug — appears in slide URLs

@@ -15,9 +15,11 @@
 #
 MINPRESSIVE ?= ../minpressive/minpressive_basic.html
 
-# `offline` needs the quiz itself, since the questions come from the YAML
-# rather than the deck. By convention that is slides/<name>.yaml beside
-# slides/<name>.md; override for a one-off:
+# `offline` needs the questions. A deck that writes them into ```quiz fences
+# already has them, and needs nothing further. A deck that only places panels
+# by reference — ::: {.quiz question=key} — needs the quiz file passed, and
+# picks up slides/<name>.yaml beside the deck if it exists. Override for a
+# one-off:
 #
 #   make offline QUIZ=examples/ethics-week3.yaml
 #
@@ -58,12 +60,8 @@ slides/%.html: slides/%.md tools/quiz-embed.html tools/quiz-filter.lua
 slides/%.offline.html: slides/%.md tools/quiz-offline.lua
 	$(check_template)
 	@quiz="$(or $(QUIZ),slides/$*.yaml)"; \
-	test -f "$$quiz" || { \
-	  echo "no quiz file for $< — expected slides/$*.yaml, or pass QUIZ=..."; \
-	  exit 1; \
-	}; \
-	pandoc $< \
-	  --metadata-file="$$quiz" \
+	if [ -f "$$quiz" ]; then meta="--metadata-file=$$quiz"; else meta=""; fi; \
+	pandoc $< $$meta \
 	  --lua-filter=tools/quiz-offline.lua \
 	  --template=$(MINPRESSIVE) \
 	  --embed-resources --standalone \

@@ -17,7 +17,7 @@ import System.IO.Temp (withSystemTempDirectory)
 import Test.Hspec
 
 import Quiz.Answer
-import Quiz.Parse (decodeQuiz, loadQuizFile)
+import Quiz.Parse (decodeQuiz, decodeQuizMarkdown, loadQuizFile)
 import Quiz.Store
 import Quiz.Token
 import Quiz.Types
@@ -400,6 +400,96 @@ examplesSpec = do
         -- Every type the tool supports should be there to copy.
         map (questionTypeName . questionBody) (quizQuestions quiz)
           `shouldBe` ["choice", "multi", "text", "scale", "grid"]
+
+  it "reads a quiz written into a Markdown deck" $ do
+    parsed <- loadQuizFile "slides/ethics-week4.md"
+    case parsed of
+      Left err -> expectationFailure err
+      Right quiz -> do
+        map formatProblem (validateQuiz quiz) `shouldBe` []
+        quizSlug quiz `shouldBe` QuizSlug "ethics-week4"
+        -- Questions come out in document order, which is the order they are
+        -- asked in.
+        map (unQuestionKey . questionKey) (quizQuestions quiz)
+          `shouldBe` [ "transplant"
+                     , "what-explains"
+                     , "name-the-principle"
+                     , "still-consequentialist"
+                     ]
+
+  -- The two authoring styles are one parser with two front ends, so a deck and
+  -- the equivalent standalone file must give the identical quiz — otherwise
+  -- what reaches the server would depend on how it was written down.
+  it "gives the same quiz however it was written" $ do
+    let embedded =
+          TE.encodeUtf8 . T.pack $
+            unlines
+              [ "---"
+              , "quiz: same"
+              , "title: Same"
+              , "---"
+              , ""
+              , "# A slide"
+              , ""
+              , "```quiz"
+              , "key: pick"
+              , "type: choice"
+              , "prompt: Pick one"
+              , "options:"
+              , "  - { key: a, text: A }"
+              , "  - { key: b, text: B }"
+              , "```"
+              ]
+        standalone =
+          yaml
+            [ "quiz: same"
+            , "title: Same"
+            , "questions:"
+            , "  - key: pick"
+            , "    type: choice"
+            , "    prompt: Pick one"
+            , "    options:"
+            , "      - { key: a, text: A }"
+            , "      - { key: b, text: B }"
+            ]
+    decodeQuizMarkdown embedded `shouldBe` decodeQuiz standalone
+
+  it "accepts a fence written in pandoc's attribute form" $ do
+    let deck cls =
+          TE.encodeUtf8 . T.pack $
+            unlines
+              [ "---", "quiz: f", "title: F", "---"
+              , "``` " <> cls
+              , "key: k"
+              , "type: text"
+              , "prompt: Say something"
+              , "```"
+              ]
+    -- Bare, and both class orders — ```{.yaml .quiz} is what gets an editor to
+    -- highlight the YAML, so it must work too.
+    for_ ["quiz", "{.quiz}", "{.quiz .yaml}", "{.yaml .quiz}"] $ \cls ->
+      case decodeQuizMarkdown (deck cls) of
+        Left err -> expectationFailure (cls <> ": " <> err)
+        Right q -> length (quizQuestions q) `shouldBe` 1
+
+  it "says which fence is at fault when one will not parse" $ do
+    let deck =
+          TE.encodeUtf8 . T.pack $
+            unlines
+              [ "---", "quiz: f", "title: F", "---"
+              , "```quiz"
+              , "key: ok"
+              , "type: text"
+              , "prompt: Fine"
+              , "```"
+              , "```quiz"
+              , "key: bad"
+              , "  nested: [oops"
+              , "```"
+              ]
+    case decodeQuizMarkdown deck of
+      Right _ -> expectationFailure "expected the second fence to be rejected"
+      Left err -> err `shouldSatisfy` ("quiz block 2" `isInfixOf`)
 
   it "parses and validates examples/ethics-week3.yaml" $ do
     parsed <- loadQuizFile "examples/ethics-week3.yaml"
