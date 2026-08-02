@@ -337,8 +337,24 @@ header-includes: |
 ---
 ```
 
-Then drop a panel wherever you want results, naming a question key — or `join`
-for the joining address — as a fenced div:
+### Putting a panel on a slide
+
+**A question written into the deck** places its own panel — the fence is both
+the definition and the position:
+
+````markdown
+```quiz
+key: trolley
+type: choice
+prompt: "Do you pull the lever?"
+options:
+  - { key: pull,    text: "Pull the lever" }
+  - { key: refrain, text: "Do nothing" }
+```
+````
+
+**A question defined elsewhere** — in a standalone `.yaml` — is placed by
+reference, naming its key:
 
 ```markdown
 ::: {.quiz question=trolley}
@@ -346,13 +362,25 @@ Waiting for responses…
 :::
 ```
 
-`tools/quiz-filter.lua` turns that into the `<table data-quiz="trolley">` the
-embed script looks for, using the div's own content as the placeholder row —
-no HTML to hand-write in the deck at all. A `.quiz` div with no `question=`
-attribute is left untouched and warns on stderr during the build, rather than
-silently producing a panel that never does anything.
+**The joining slide is always the reference form**, whichever style the rest of
+the deck uses:
 
-If you would rather not run the filter, the equivalent by hand is:
+```markdown
+::: {.quiz question=join}
+Waiting…
+:::
+```
+
+`join` is not a question — there is nothing to define, only somewhere to show
+the address — so it has no fence form. This is why `join` is a reserved
+question key: the panel occupies that path.
+
+The joining panel shows a QR code above the address, so a phone can scan rather
+than type. It is plain inline SVG coloured with the deck's own ink, following
+light and dark exactly as the tally bars do, with no image file and no external
+request.
+
+If you would rather not run the filter at all, the equivalent by hand is:
 
 ```html
 <table data-quiz="trolley"><tbody>
@@ -360,9 +388,12 @@ If you would rather not run the filter, the equivalent by hand is:
 </tbody></table>
 ```
 
-Either way, the placeholder is not decoration: it is what shows before the
+In every form, the placeholder is not decoration: it is what shows before the
 first fetch, what shows if JavaScript never runs, and what gives the table
-enough height to be recognised as a reveal step.
+enough height to be recognised as a reveal step. A `.quiz` div with no
+`question=`, or a fence with no `key:`, is left alone and warns on stderr
+during the build rather than silently producing a panel that never does
+anything.
 
 Slide URLs name a quiz and a question but **never a session**, so a deck is
 written once and runs every year the unit is taught.
