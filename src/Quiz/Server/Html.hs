@@ -232,8 +232,8 @@ joinQr base code = case qrMatrix (joinFullUrl base code) of
   Nothing -> pure ()
   Just modules -> div_ [class_ "quiz-qr"] (toHtmlRaw (qrSvg modules))
 
-embedResults :: Question -> Phase -> Tally -> Html ()
-embedResults question phase tally =
+embedResults :: Text -> JoinCode -> Question -> Phase -> Tally -> Html ()
+embedResults base code question phase tally =
   shell (questionPrompt question) embedCss (Just 2) $ do
     p_ [class_ "prompt"] (toHtml (questionPrompt question))
     case tally of
@@ -250,6 +250,7 @@ embedResults question phase tally =
           else ul_ [class_ "texts"] (mapM_ (li_ . toHtml) shown)
       TallyGrid rows range _ ->
         div_ [class_ "bars"] (mapM_ (gridBar range) rows)
+    p_ [class_ "rejoin"] (toHtml ("Rejoin at " <> joinUrl base code))
 
 optionBar :: Phase -> Question -> Int -> (Option, Int) -> Html ()
 optionBar phase question total (option, n) =
@@ -330,15 +331,21 @@ percent n total = (n * 100) `div` total
 -- presenter page already carries it. A room reads the shape of the
 -- distribution, not the denominator — and the count was the one thing on the
 -- panel that changed under its own steam while nobody was looking at it.
-embedFragment :: Question -> Phase -> Tally -> Html ()
-embedFragment question phase tally = case tally of
-  TallyOptions rows _ -> mapM_ optionRow rows
-  TallyScale rows _ -> mapM_ scaleRow rows
-  TallyTexts rows _ ->
-    case [t | (_, t, True) <- rows] of
-      [] -> pure ()
-      shown -> mapM_ textRow shown
-  TallyGrid rows range _ -> mapM_ (gridRow range) rows
+-- | @base@/@code@ let a straggler read the join address off whatever question
+-- happens to be on screen, rather than the presenter breaking the deck's flow
+-- to page back to the dedicated join slide. Text only, deliberately no QR —
+-- one per panel would be noise, and a lost phone can still read an address.
+embedFragment :: Text -> JoinCode -> Question -> Phase -> Tally -> Html ()
+embedFragment base code question phase tally = do
+  case tally of
+    TallyOptions rows _ -> mapM_ optionRow rows
+    TallyScale rows _ -> mapM_ scaleRow rows
+    TallyTexts rows _ ->
+      case [t | (_, t, True) <- rows] of
+        [] -> pure ()
+        shown -> mapM_ textRow shown
+    TallyGrid rows range _ -> mapM_ (gridRow range) rows
+  rejoinRow base code
   where
     -- Only the count-based rows divide by this; a grid's bar is a position on
     -- its scale, not a share of a total, so it never reaches here.
@@ -397,6 +404,12 @@ joinFragment :: Text -> JoinCode -> Html ()
 joinFragment base code = do
   tr_ [class_ "quiz-qr-row"] (td_ [colspan_ "2"] (joinQr base code))
   tr_ [class_ "quiz-join"] (td_ [colspan_ "2"] (toHtml (joinUrl base code)))
+
+-- | The join address as a closing row on an ordinary results panel — see
+-- 'embedFragment'.
+rejoinRow :: Text -> JoinCode -> Html ()
+rejoinRow base code =
+  tr_ [class_ "quiz-rejoin"] (td_ [colspan_ "2"] (toHtml ("Rejoin at " <> joinUrl base code)))
 
 
 -- Presenter -----------------------------------------------------------------
@@ -652,4 +665,5 @@ embedCss =
       -- embeds this page.
       ".quiz-qr svg { display: block; width: 12rem; aspect-ratio: 1; margin: 0 auto; }"
     , ".join { text-align: center; }"
+    , ".rejoin { text-align: center; opacity: .6; font-size: .85em; }"
     ]

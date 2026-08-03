@@ -139,6 +139,18 @@
     border-left: 2px solid color-mix(in srgb, currentColor 25%, transparent) !important;
     padding-left: .75em;
   }
+
+  /* A rejoin line closes every results panel, in case a student lost their
+     page mid-lecture and needs the address off whatever slide is currently
+     up — see Quiz.Server.Html.embedFragment. Dimmed and small so it reads as
+     a fallback, not as part of the result being presented. */
+  [data-quiz] .quiz-rejoin > td {
+    width: 100%;
+    text-align: center;
+    opacity: .6;
+    font-size: .8em;
+    padding-top: .6em;
+  }
 </style>
 
 <script>

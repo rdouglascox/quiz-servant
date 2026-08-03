@@ -229,23 +229,29 @@ joinH slug = withActiveQuiz slug $ \st -> do
 fragH :: Text -> Text -> AppM (Html ())
 fragH slug qkeyRaw = do
   world <- liftIO . readWorld =<< asks envStore
+  base <- asks envBaseUrl
   pure $ case activeState world of
     Just st
       | unQuizSlug (sessionQuizSlug (stateSession st)) == slug
       , Just question <- findQuestion (QuestionKey qkeyRaw) st ->
           embedFragment
+            base
+            (sessionCode (stateSession st))
             question
             (phaseOf (QuestionKey qkeyRaw) st)
             (tallyFor question (responsesFor (QuestionKey qkeyRaw) st))
     _ -> fragmentNotLive
 
 resultsH :: Text -> Text -> AppM (Html ())
-resultsH slug qkeyRaw = withActiveQuiz slug $ \st ->
+resultsH slug qkeyRaw = withActiveQuiz slug $ \st -> do
+  base <- asks envBaseUrl
   case findQuestion (QuestionKey qkeyRaw) st of
     Nothing -> pure (embedNotLive slug)
     Just question ->
       pure $
         embedResults
+          base
+          (sessionCode (stateSession st))
           question
           (phaseOf (QuestionKey qkeyRaw) st)
           (tallyFor question (responsesFor (QuestionKey qkeyRaw) st))
