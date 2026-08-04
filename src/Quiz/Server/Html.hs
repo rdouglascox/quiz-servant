@@ -436,6 +436,7 @@ presenterPage secret isActive st =
       unless isActive $
         postButton ["activate"] "go" "Make this session live"
     mapM_ questionCard (quizQuestions quiz)
+    script_ preserveScroll
   where
     quiz = stateQuiz st
     session = stateSession st
@@ -542,6 +543,26 @@ markAnswered =
     , "  var done = JSON.parse(localStorage.getItem('answered') || '[]');"
     , "  document.querySelectorAll('[data-qkey]').forEach(function (li) {"
     , "    if (done.indexOf(li.dataset.qkey) >= 0) { li.classList.add('answered'); }"
+    , "  });"
+    , "} catch (e) {}"
+    ]
+
+-- | The presenter page's own auto-refresh (see 'shell') is a full navigation,
+-- not a partial re-render, and a plain reload does not preserve scroll the
+-- way back/forward navigation does. With a couple of dozen held-back text
+-- answers that is a non-issue; with a couple of hundred it means the page
+-- yanks you back to the top every five seconds while you are trying to
+-- triage them. Keyed on the path (which carries the presenter secret), so
+-- switching to a different session's page never restores a stale position.
+preserveScroll :: Text
+preserveScroll =
+  T.unlines
+    [ "try {"
+    , "  var key = 'quiz-servant-scroll:' + location.pathname;"
+    , "  var y = sessionStorage.getItem(key);"
+    , "  if (y !== null) window.scrollTo(0, parseInt(y, 10) || 0);"
+    , "  window.addEventListener('beforeunload', function () {"
+    , "    sessionStorage.setItem(key, String(window.scrollY));"
     , "  });"
     , "} catch (e) {}"
     ]
