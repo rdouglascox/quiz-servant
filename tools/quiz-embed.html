@@ -94,6 +94,16 @@
     padding-bottom: .35em;
   }
 
+  /* A grid's bars are a position on its own scale, not a share of a total —
+     unreadable without knowing what the endpoints mean. Dimmed like the
+     rejoin line: it is context for the row below it, not a result itself. */
+  [data-quiz] .quiz-grid-legend > td {
+    width: 100%;
+    opacity: .7;
+    font-size: .85em;
+    padding-bottom: .35em;
+  }
+
   [data-quiz] .quiz-option {
     background-image: linear-gradient(to right,
       color-mix(in srgb, currentColor 18%, transparent) 0 calc(var(--pct, 0) * 1%),

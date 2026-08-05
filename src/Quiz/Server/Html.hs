@@ -119,10 +119,6 @@ bodyFields = \case
           , value_ (unOptionKey (optionKey option))
           ]
         span_ (toHtml (optionText option))
-    gridLegend :: Range -> Map.Map Int Text -> Text
-    gridLegend (Range lo hi) labels =
-      let end n = tshow n <> maybe "" (" " <>) (Map.lookup n labels)
-       in end lo <> "  \8230  " <> end hi
 
     gridItem :: Range -> Option -> Html ()
     gridItem (Range lo hi) item =
@@ -248,7 +244,8 @@ embedResults base code question phase tally =
         if null shown
           then p_ [class_ "small"] "No answers shown yet."
           else ul_ [class_ "texts"] (mapM_ (li_ . toHtml) shown)
-      TallyGrid rows range _ ->
+      TallyGrid rows range _ -> do
+        p_ [class_ "small"] (toHtml (gridLegend range (gridLabelsOf question)))
         div_ [class_ "bars"] (mapM_ (gridBar range) rows)
     p_ [class_ "rejoin"] (toHtml ("Rejoin at " <> joinUrl base code))
 
@@ -271,6 +268,16 @@ scalePointLabel question point = case questionBody question of
   BodyScale spec
     | Just l <- Map.lookup point (scaleLabels spec) -> tshow point <> " " <> l
   _ -> tshow point
+
+-- | The scale stated once — "1 Not at all … 5 Very" — rather than beside
+-- every proposition, whose bars carry only a mean. Shared by the student form
+-- and both slide-facing renderers ('embedResults', 'embedFragment'): a grid's
+-- bars are meaningless without knowing what the endpoints are, and unlike a
+-- 'scale' question's own points, nothing else on a grid panel states them.
+gridLegend :: Range -> Map.Map Int Text -> Text
+gridLegend (Range lo hi) labels =
+  let end n = tshow n <> maybe "" (" " <>) (Map.lookup n labels)
+   in end lo <> "  \8230  " <> end hi
 
 scaleBar :: Int -> (Text, Int) -> Html ()
 scaleBar total (label, n) =
@@ -308,6 +315,14 @@ correctKeys question = case questionBody question of
   BodyChoice spec -> maybe [] pure (choiceCorrect spec)
   BodyMulti spec -> multiCorrect spec
   _ -> []
+
+-- | A grid question's own point labels, empty for every other type — mirrors
+-- 'correctKeys' in shape, for the same reason: only 'embedFragment' and
+-- 'embedResults' need this, and both only have a 'Question' in hand.
+gridLabelsOf :: Question -> Map.Map Int Text
+gridLabelsOf question = case questionBody question of
+  BodyGrid spec -> gridLabels spec
+  _ -> Map.empty
 
 percent :: Int -> Int -> Int
 percent _ 0 = 0
@@ -355,7 +370,9 @@ embedFragment base code question phase tally = do
       case [t | (_, t, True) <- rows] of
         [] -> pure ()
         shown -> mapM_ textRow shown
-    TallyGrid rows range _ -> mapM_ (gridRow range) rows
+    TallyGrid rows range _ -> do
+      gridLegendRow range (gridLabelsOf question)
+      mapM_ (gridRow range) rows
   rejoinRow base code
   where
     -- Only the count-based rows divide by this; a grid's bar is a position on
@@ -398,6 +415,16 @@ embedFragment base code question phase tally = do
         $ do
           td_ [class_ "quiz-option"] (toHtml (optionText item))
           td_ [class_ "quiz-count"] (toHtml (maybe "\8212" oneDecimal mMean))
+
+    -- A grid's bars are a position on its own scale, not a share of a total —
+    -- meaningless without knowing what the endpoints are, and unlike a
+    -- 'scale' question's own points (see 'scalePointLabel'), nothing else on
+    -- the panel states them. Same gap as the missing prompt above, found the
+    -- same way: this fragment never carried it, though 'embedResults' does
+    -- now too.
+    gridLegendRow :: Range -> Map.Map Int Text -> Html ()
+    gridLegendRow range labels =
+      tr_ [class_ "quiz-grid-legend"] (td_ [colspan_ "2"] (toHtml (gridLegend range labels)))
 
 -- | Shown when the slide's quiz is not the one that is live. Same reasoning as
 -- 'embedNotLive', in row form.
