@@ -331,12 +331,23 @@ percent n total = (n * 100) `div` total
 -- presenter page already carries it. A room reads the shape of the
 -- distribution, not the denominator — and the count was the one thing on the
 -- panel that changed under its own steam while nobody was looking at it.
+--
+-- The prompt itself, though, is not the presenter's information — it is
+-- whoever is looking at the slide's only reminder of what is being asked.
+-- Leaving it out and trusting the deck's own surrounding text to cover it
+-- worked until it didn't: a presenter got lost on a live question because
+-- the prompt was on screen nowhere they could actually see while talking —
+-- not on the slide, and a reference-form panel (@::: {.quiz question=…}@)
+-- carries no guarantee its author wrote the prompt nearby at all. So the
+-- panel states it itself now, same as 'embedResults' already did.
+--
 -- | @base@/@code@ let a straggler read the join address off whatever question
 -- happens to be on screen, rather than the presenter breaking the deck's flow
 -- to page back to the dedicated join slide. Text only, deliberately no QR —
 -- one per panel would be noise, and a lost phone can still read an address.
 embedFragment :: Text -> JoinCode -> Question -> Phase -> Tally -> Html ()
 embedFragment base code question phase tally = do
+  tr_ [class_ "quiz-prompt"] (td_ [colspan_ "2"] (toHtml (questionPrompt question)))
   case tally of
     TallyOptions rows _ -> mapM_ optionRow rows
     TallyScale rows _ -> mapM_ scaleRow rows
