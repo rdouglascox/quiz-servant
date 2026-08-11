@@ -233,6 +233,13 @@ joinQr base code = case qrMatrix (joinFullUrl base code) of
 -- with a correct answer already has an independent gate on disclosing
 -- /which/ one, via @phase@; this is the same idea one level up, gating the
 -- tally itself, and the presenter controls it with its own Show/Hide button.
+--
+-- Hidden shows the same options/points/items at zero rather than a "results
+-- hidden" note — what the room is being asked is not a secret, only how it
+-- has answered so far. Built from 'zeroBar' rather than 'optionBar'/'gridBar'
+-- with a zeroed count, because those two also derive the correct-answer
+-- highlight from @phase@, and that must not leak while hidden either — a
+-- lone highlighted bar at 0% would still give the answer away.
 embedResults :: Text -> JoinCode -> Bool -> Question -> Phase -> Tally -> Html ()
 embedResults base code visible question phase tally =
   shell (questionPrompt question) embedCss (Just 2) $ do
@@ -240,26 +247,32 @@ embedResults base code visible question phase tally =
     case tally of
       TallyOptions rows total
         | visible -> div_ [class_ "bars"] (mapM_ (optionBar phase question total) rows)
-        | otherwise -> hiddenNote
+        | otherwise -> div_ [class_ "bars"] (mapM_ (zeroBar . optionText . fst) rows)
       TallyScale rows total
         | visible ->
             div_
               [class_ "bars"]
               (mapM_ (\(p, n) -> scaleBar total (scalePointLabel question p, n)) rows)
-        | otherwise -> hiddenNote
+        | otherwise ->
+            div_ [class_ "bars"] (mapM_ (zeroBar . scalePointLabel question . fst) rows)
       TallyTexts rows _ -> do
         let shown = [t | (_, t, True) <- rows]
         if null shown
           then p_ [class_ "small"] "No answers shown yet."
           else ul_ [class_ "texts"] (mapM_ (li_ . toHtml) shown)
-      TallyGrid rows range _
-        | visible -> do
-            p_ [class_ "small"] (toHtml (gridLegend range (gridLabelsOf question)))
-            div_ [class_ "bars"] (mapM_ (gridBar range) rows)
-        | otherwise -> hiddenNote
+      TallyGrid rows range _ -> do
+        p_ [class_ "small"] (toHtml (gridLegend range (gridLabelsOf question)))
+        if visible
+          then div_ [class_ "bars"] (mapM_ (gridBar range) rows)
+          else div_ [class_ "bars"] (mapM_ (\(item, _) -> gridBar range (item, Nothing)) rows)
     p_ [class_ "rejoin"] (toHtml ("Rejoin at " <> joinUrl base code))
   where
-    hiddenNote = p_ [class_ "small"] "Results hidden until shown."
+    zeroBar :: Text -> Html ()
+    zeroBar label =
+      div_ [class_ "bar"] $ do
+        div_ [class_ "fill", style_ "width:0%"] mempty
+        span_ [class_ "label"] (toHtml label)
+        span_ [class_ "n"] "0"
 
 optionBar :: Phase -> Question -> Int -> (Option, Int) -> Html ()
 optionBar phase question total (option, n) =
@@ -374,31 +387,32 @@ percent n total = (n * 100) `div` total
 -- one per panel would be noise, and a lost phone can still read an address.
 --
 -- @visible@ gates everything but 'TallyTexts' — see 'embedResults', which
--- gates the same way for the same reason.
+-- gates the same way for the same reason, including why hidden shows the
+-- options/points/items at zero rather than a "results hidden" note, and why
+-- that reuses @row False label 0@ rather than 'optionRow'/'gridRow' with a
+-- zeroed count — those derive the correct-answer highlight from @phase@,
+-- which must not leak while hidden either.
 embedFragment :: Text -> JoinCode -> Bool -> Question -> Phase -> Tally -> Html ()
 embedFragment base code visible question phase tally = do
   tr_ [class_ "quiz-prompt"] (td_ [colspan_ "2"] (toHtml (questionPrompt question)))
   case tally of
     TallyOptions rows _
       | visible -> mapM_ optionRow rows
-      | otherwise -> hiddenRow
+      | otherwise -> mapM_ (\(option, _) -> row False (optionText option) 0) rows
     TallyScale rows _
       | visible -> mapM_ scaleRow rows
-      | otherwise -> hiddenRow
+      | otherwise -> mapM_ (\(point, _) -> row False (scalePointLabel question point) 0) rows
     TallyTexts rows _ ->
       case [t | (_, t, True) <- rows] of
         [] -> pure ()
         shown -> mapM_ textRow shown
-    TallyGrid rows range _
-      | visible -> do
-          gridLegendRow range (gridLabelsOf question)
-          mapM_ (gridRow range) rows
-      | otherwise -> hiddenRow
+    TallyGrid rows range _ -> do
+      gridLegendRow range (gridLabelsOf question)
+      if visible
+        then mapM_ (gridRow range) rows
+        else mapM_ (\(item, _) -> gridRow range (item, Nothing)) rows
   rejoinRow base code
   where
-    hiddenRow :: Html ()
-    hiddenRow = tr_ [class_ "quiz-hidden"] (td_ [colspan_ "2"] "Results hidden until shown.")
-
     -- Only the count-based rows divide by this; a grid's bar is a position on
     -- its scale, not a share of a total, so it never reaches here.
     total = case tally of

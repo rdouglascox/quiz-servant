@@ -88,6 +88,18 @@ The presenter page shows a private, always-current text list of the tally
 regardless of the toggle — otherwise "Show results" would be a guess rather
 than a decision.
 
+**Hidden shows the options at zero, not a "results hidden" note.** The first
+version did the latter; changed on request once it was seen live — what the
+room is being asked is not a secret, only how it has answered so far, so
+there is no reason to withhold the options themselves. The zeroed rows reuse
+the same rendering path as a real one with the count forced to `0` (or, for a
+grid mean, `Nothing`), rather than deriving the correct-answer highlight from
+`phase` and hoping it stays off — a lone highlighted bar sitting at 0% would
+still give the answer away while otherwise "hidden". `phase` and the
+visibility toggle are independent, so a question can be `Revealed` (the
+correct answer decided) while still hidden from the room; the highlight must
+not leak through that combination either.
+
 ### There is no database; responses accumulate on a volume
 
 The design began from "responses that are not pulled shortly after the lecture
