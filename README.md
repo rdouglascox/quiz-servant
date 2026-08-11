@@ -275,15 +275,19 @@ The `push` also wakes a sleeping server, so no student meets a cold start
 when deployed; see [the two rules](#two-rules).
 
 During class, drive it from the **presenter page** — the secret URL printed by
-`session`. It has one obvious control per question: Open, Close, Reveal answer,
-Reopen. Free-text answers appear there held back, each with a Show button;
-nothing reaches the projector unread.
+`session`. Per question it has Open, Close, Reveal answer, Reopen — and, for
+every type except free text, an independent **Show results / Hide results**
+toggle. The room sees nothing until you show it, whichever of those phases the
+question is in: watch the tally privately on the presenter page and reveal it
+whenever you choose, without that deciding whether the question is still
+accepting answers. Free-text answers appear there held back individually,
+each with its own Show button; nothing reaches the projector unread.
 
 **Never put the presenter URL on the projector.** The page says so in a red
 banner, because the secret is the entire authentication.
 
-Everything the page does is also available from the CLI, if you would rather
-not alt-tab:
+Open, Close, and Reveal are also available from the CLI, if you would rather
+not alt-tab — the results toggle is presenter-page only for now:
 
 ```bash
 quizctl open trolley

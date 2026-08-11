@@ -62,6 +62,32 @@ Same implementation as strict one-at-a-time pacing, but it also supports "here
 are three questions, take five minutes", and it degrades sanely if a question
 is left open.
 
+### A question's tally is hidden from the room until the presenter shows it
+
+Originally the slide showed live counts from the moment anyone could poll a
+panel — before Open, even, if that panel happened to already be the deck's
+current reveal step. Found wanting after the first real lecture: there was no
+way to keep a running tally off the projector while people were still voting.
+
+Two designs were on the table. Tying visibility to the existing Open/Close
+phase — closing a question reveals it, reopening hides it again — needs no new
+control and was the simpler build. Chosen instead: a **separate Show
+results / Hide results toggle**, independent of phase, so a question can keep
+accepting answers while the presenter decides, separately and at any point,
+whether the room currently sees the tally. The cost is a second control per
+question; the payoff is not having voting-open and results-visible forced to
+move together, which would have made "let's see where we stand, then keep
+going" impossible without an artificial close/reopen.
+
+Free text is unaffected — it already had its own per-answer Show/Hide for
+moderation before this existed, and nothing here changes that. A tally
+question defaults to **hidden**, not visible: the point of the toggle is that
+results are held back until shown, not shown until hidden.
+
+The presenter page shows a private, always-current text list of the tally
+regardless of the toggle — otherwise "Show results" would be a guess rather
+than a decision.
+
 ### There is no database; responses accumulate on a volume
 
 The design began from "responses that are not pulled shortly after the lecture
@@ -439,7 +465,7 @@ text that can be reworded without invalidating last year's data.
 | --- | --- | --- |
 | Student (HTML) | none | `GET /s/:code`, `GET/POST /s/:code/:qkey`, `GET /s/:code/:qkey/done` |
 | Embed (HTML, for slides) | none | `GET /embed/:slug/join`, `GET /embed/:slug/:qkey` |
-| Presenter (HTML) | secret URL | `GET /p/:secret`, `POST /p/:secret/{open,close,reveal}/:qkey`, `POST /p/:secret/text/:id/{show,hide}`, `POST /p/:secret/activate` |
+| Presenter (HTML) | secret URL | `GET /p/:secret`, `POST /p/:secret/{open,close,reveal,show,hide}/:qkey`, `POST /p/:secret/text/:id/{show,hide}`, `POST /p/:secret/activate` |
 | Admin (JSON) | bearer token | `PUT /api/quiz`, `POST /api/session`, `POST /api/session/:id/activate`, `GET /api/session/:id/responses` |
 
 The presenter URL is a secret, so it must never appear on the projector. The

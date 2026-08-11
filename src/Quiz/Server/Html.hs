@@ -228,26 +228,38 @@ joinQr base code = case qrMatrix (joinFullUrl base code) of
   Nothing -> pure ()
   Just modules -> div_ [class_ "quiz-qr"] (toHtmlRaw (qrSvg modules))
 
-embedResults :: Text -> JoinCode -> Question -> Phase -> Tally -> Html ()
-embedResults base code question phase tally =
+-- | @visible@ gates everything but 'TallyTexts', which keeps its own,
+-- separate per-answer visibility ('responseVisible') regardless — a question
+-- with a correct answer already has an independent gate on disclosing
+-- /which/ one, via @phase@; this is the same idea one level up, gating the
+-- tally itself, and the presenter controls it with its own Show/Hide button.
+embedResults :: Text -> JoinCode -> Bool -> Question -> Phase -> Tally -> Html ()
+embedResults base code visible question phase tally =
   shell (questionPrompt question) embedCss (Just 2) $ do
     p_ [class_ "prompt"] (toHtml (questionPrompt question))
     case tally of
-      TallyOptions rows total ->
-        div_ [class_ "bars"] (mapM_ (optionBar phase question total) rows)
-      TallyScale rows total ->
-        div_
-          [class_ "bars"]
-          (mapM_ (\(p, n) -> scaleBar total (scalePointLabel question p, n)) rows)
+      TallyOptions rows total
+        | visible -> div_ [class_ "bars"] (mapM_ (optionBar phase question total) rows)
+        | otherwise -> hiddenNote
+      TallyScale rows total
+        | visible ->
+            div_
+              [class_ "bars"]
+              (mapM_ (\(p, n) -> scaleBar total (scalePointLabel question p, n)) rows)
+        | otherwise -> hiddenNote
       TallyTexts rows _ -> do
         let shown = [t | (_, t, True) <- rows]
         if null shown
           then p_ [class_ "small"] "No answers shown yet."
           else ul_ [class_ "texts"] (mapM_ (li_ . toHtml) shown)
-      TallyGrid rows range _ -> do
-        p_ [class_ "small"] (toHtml (gridLegend range (gridLabelsOf question)))
-        div_ [class_ "bars"] (mapM_ (gridBar range) rows)
+      TallyGrid rows range _
+        | visible -> do
+            p_ [class_ "small"] (toHtml (gridLegend range (gridLabelsOf question)))
+            div_ [class_ "bars"] (mapM_ (gridBar range) rows)
+        | otherwise -> hiddenNote
     p_ [class_ "rejoin"] (toHtml ("Rejoin at " <> joinUrl base code))
+  where
+    hiddenNote = p_ [class_ "small"] "Results hidden until shown."
 
 optionBar :: Phase -> Question -> Int -> (Option, Int) -> Html ()
 optionBar phase question total (option, n) =
@@ -360,21 +372,33 @@ percent n total = (n * 100) `div` total
 -- happens to be on screen, rather than the presenter breaking the deck's flow
 -- to page back to the dedicated join slide. Text only, deliberately no QR —
 -- one per panel would be noise, and a lost phone can still read an address.
-embedFragment :: Text -> JoinCode -> Question -> Phase -> Tally -> Html ()
-embedFragment base code question phase tally = do
+--
+-- @visible@ gates everything but 'TallyTexts' — see 'embedResults', which
+-- gates the same way for the same reason.
+embedFragment :: Text -> JoinCode -> Bool -> Question -> Phase -> Tally -> Html ()
+embedFragment base code visible question phase tally = do
   tr_ [class_ "quiz-prompt"] (td_ [colspan_ "2"] (toHtml (questionPrompt question)))
   case tally of
-    TallyOptions rows _ -> mapM_ optionRow rows
-    TallyScale rows _ -> mapM_ scaleRow rows
+    TallyOptions rows _
+      | visible -> mapM_ optionRow rows
+      | otherwise -> hiddenRow
+    TallyScale rows _
+      | visible -> mapM_ scaleRow rows
+      | otherwise -> hiddenRow
     TallyTexts rows _ ->
       case [t | (_, t, True) <- rows] of
         [] -> pure ()
         shown -> mapM_ textRow shown
-    TallyGrid rows range _ -> do
-      gridLegendRow range (gridLabelsOf question)
-      mapM_ (gridRow range) rows
+    TallyGrid rows range _
+      | visible -> do
+          gridLegendRow range (gridLabelsOf question)
+          mapM_ (gridRow range) rows
+      | otherwise -> hiddenRow
   rejoinRow base code
   where
+    hiddenRow :: Html ()
+    hiddenRow = tr_ [class_ "quiz-hidden"] (td_ [colspan_ "2"] "Results hidden until shown.")
+
     -- Only the count-based rows divide by this; a grid's bar is a position on
     -- its scale, not a share of a total, so it never reaches here.
     total = case tally of
@@ -493,6 +517,7 @@ presenterPage secret isActive st =
       let qk = questionKey q
           phase = phaseOf qk st
           responses = responsesFor qk st
+          visible = resultsVisibleFor qk st
       p_ [class_ "meta"] $ do
         code_ (toHtml (unQuestionKey qk))
         " · "
@@ -506,7 +531,11 @@ presenterPage secret isActive st =
       div_ [class_ "controls"] (phaseButtons qk phase (not (null (correctKeys q))))
       case questionBody q of
         BodyText{} -> textAnswers responses
-        _ -> mempty
+        _ -> do
+          div_ [class_ "controls"] (resultsButton qk visible)
+          p_ [class_ "muted"] $
+            if visible then "Results visible to the room." else "Results hidden from the room."
+          resultsPreview (tallyFor q responses)
 
     phaseButtons :: QuestionKey -> Phase -> Bool -> Html ()
     phaseButtons qk phase revealable = case phase of
@@ -525,6 +554,33 @@ presenterPage secret isActive st =
       Live -> span_ [class_ "badge onair"] "open"
       Closed -> span_ [class_ "badge"] "closed"
       Revealed -> span_ [class_ "badge"] "revealed"
+
+    -- Independent of 'phaseButtons': a question can keep accepting answers
+    -- while its tally is shown or hidden, in either order. See
+    -- 'Quiz.Store.setResultsVisible'.
+    resultsButton :: QuestionKey -> Bool -> Html ()
+    resultsButton qk visible =
+      if visible
+        then postButton ["hide", unQuestionKey qk] "quiet" "Hide results"
+        else postButton ["show", unQuestionKey qk] "go" "Show results"
+
+    -- A private, always-current view for the presenter alone, regardless of
+    -- whether the room currently sees it — otherwise "Show results" would be
+    -- a guess. Plain text rather than the slide's bars: this is a reading
+    -- aid for one person deciding when to reveal, not something read from
+    -- the back of a room. Never reached for a text question (that has its
+    -- own view, 'textAnswers'), so 'TallyTexts' is unreachable here.
+    resultsPreview :: Tally -> Html ()
+    resultsPreview = \case
+      TallyOptions rows _ -> ul_ [class_ "tally"] (mapM_ optionRow rows)
+      TallyScale rows _ -> ul_ [class_ "tally"] (mapM_ scaleRow rows)
+      TallyGrid rows _ _ -> ul_ [class_ "tally"] (mapM_ gridRow rows)
+      TallyTexts{} -> mempty
+      where
+        optionRow (option, n) = li_ (toHtml (optionText option <> ": " <> tshow n))
+        scaleRow (point, n) = li_ (toHtml (tshow point <> ": " <> tshow n))
+        gridRow (item, mMean) =
+          li_ (toHtml (optionText item <> ": " <> maybe "\8212" oneDecimal mMean))
 
     -- Oldest first, mirroring 'responsesFor'. Hidden answers carry the Show
     -- button; that promotion is the moderation step — nothing reaches the
@@ -681,7 +737,7 @@ presenterCss =
     , ".badge { border: 1px solid currentColor; border-radius: 1rem; padding: 0 .5rem; font-size: .75rem; }"
     , ".onair { color: #059669; font-weight: 700; }"
     , ".offair { color: #dc2626; font-weight: 700; }"
-    , ".controls { display: flex; gap: .5rem; }"
+    , ".controls { display: flex; gap: .5rem; margin: .5rem 0; }"
     , "form.inline { display: inline; margin: 0; }"
     , "button { font: inherit; font-weight: 600; padding: .45rem 1rem; border: 0; border-radius: .375rem; cursor: pointer; color: #fff; }"
     , "button.go { background: #059669; }"
@@ -692,6 +748,11 @@ presenterCss =
     , ".answers li.held .txt { opacity: .6; font-style: italic; }"
     , ".answers .txt { overflow-wrap: anywhere; }"
     , ".answers button { padding: .25rem .7rem; font-size: .8rem; }"
+    , -- The presenter's own private view of a tally — see 'resultsPreview' —
+      -- styled like '.answers' for the same reason: a short list read by one
+      -- person, not the bars shown to a room.
+      ".tally { list-style: none; padding: 0; margin: .5rem 0 0; font-size: .9rem; }"
+    , ".tally li { border-top: 1px solid rgb(156 163 175 / .4); padding: .3rem 0; }"
     ]
 
 -- | Slides stay plain on purpose: this sets no fonts, sizes, or colours, so an

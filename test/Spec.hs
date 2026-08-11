@@ -103,6 +103,22 @@ storeSpec = do
     must (setTextVisible store sid rid True)
     visibilityOf store textKey `shouldReturn` [True]
 
+  -- The point of the toggle: a presenter can keep a question accepting
+  -- answers, or stop it, without that deciding what the room currently sees.
+  it "hides a question's results by default, and toggles independently of phase" $ do
+    (store, sid) <- seeded Nothing
+    resultsVisibleFor choiceKey <$> activeOf store `shouldReturn` False
+
+    must (setResultsVisible store sid choiceKey True)
+    resultsVisibleFor choiceKey <$> activeOf store `shouldReturn` True
+
+    must (setPhase store sid choiceKey Live)
+    must (setPhase store sid choiceKey Closed)
+    resultsVisibleFor choiceKey <$> activeOf store `shouldReturn` True
+
+    must (setResultsVisible store sid choiceKey False)
+    resultsVisibleFor choiceKey <$> activeOf store `shouldReturn` False
+
   it "finds a session by its presenter secret, active or not" $ do
     (store, sid) <- seeded Nothing
     secret <- secretOf store sid
@@ -196,6 +212,7 @@ storeSpec = do
       must_ (recordResponse store (epoch 0) sid choiceKey (AnswerChoice (OptionKey "a")))
       must_ (recordResponse store (epoch 1) sid choiceKey (AnswerChoice (OptionKey "b")))
       must (setPhase store sid choiceKey Closed)
+      must (setResultsVisible store sid choiceKey True)
       original <- readWorld store
 
       (reopened, report) <- openStore (Just path)

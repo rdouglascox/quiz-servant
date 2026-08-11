@@ -104,6 +104,16 @@
     padding-bottom: .35em;
   }
 
+  /* The presenter can hold a question's tally back from the room independently
+     of whether it's still accepting answers — see Quiz.Server.Html.embedFragment
+     and the "Show/Hide results" button on the presenter page. This is what
+     shows in its place. */
+  [data-quiz] .quiz-hidden > td {
+    width: 100%;
+    opacity: .7;
+    font-style: italic;
+  }
+
   [data-quiz] .quiz-option {
     background-image: linear-gradient(to right,
       color-mix(in srgb, currentColor 18%, transparent) 0 calc(var(--pct, 0) * 1%),

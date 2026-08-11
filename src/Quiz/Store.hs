@@ -46,11 +46,13 @@ module Quiz.Store
   , setPhase
   , recordResponse
   , setTextVisible
+  , setResultsVisible
   , ClearReport (..)
   , clearAll
 
     -- * Reading
   , phaseOf
+  , resultsVisibleFor
   , responsesFor
   , Tally (..)
   , tallyFor
@@ -131,6 +133,11 @@ data SessionState = SessionState
     -- later cannot change what a past session asked.
     stateQuiz :: Quiz
   , statePhases :: Map QuestionKey Phase
+  , -- | Whether the room currently sees a question's tally, independent of
+    -- whether it is still accepting answers — see 'resultsVisibleFor'.
+    -- Absent (the pre-toggle default) means hidden, same as 'statePhases'
+    -- treats an absent question as 'Pending'.
+    stateResultsVisible :: Map QuestionKey Bool
   , -- | Newest first.
     stateResponses :: [Response]
   }
@@ -163,6 +170,7 @@ data Event
   | PhaseSet SessionId QuestionKey Phase
   | ResponseRecorded SessionId Response
   | TextVisibilitySet SessionId ResponseId Bool
+  | ResultsVisibilitySet SessionId QuestionKey Bool
   deriving stock (Eq, Show)
 
 -- | The only place state changes. Replay and live updates share it, so they
@@ -181,6 +189,7 @@ applyEvent ev w = case ev of
             { stateSession = session
             , stateQuiz = quiz
             , statePhases = Map.empty
+            , stateResultsVisible = Map.empty
             , stateResponses = []
             }
      in w{worldSessions = Map.insert (sessionId session) st (worldSessions w)}
@@ -203,6 +212,11 @@ applyEvent ev w = case ev of
                   (stateResponses st)
             }
       )
+      w
+  ResultsVisibilitySet sid qkey visible ->
+    overSession
+      sid
+      (\st -> st{stateResultsVisible = Map.insert qkey visible (stateResultsVisible st)})
       w
   where
     overSession sid f world =
@@ -442,6 +456,18 @@ setTextVisible store sid rid visible = apply store $ \w ->
           Right ([TextVisibilitySet sid rid visible], ())
       | otherwise -> Left "no such response"
 
+-- | Independent of 'setPhase': a question can keep accepting answers while
+-- its tally is shown or hidden, in either order. Free text has its own,
+-- separate per-answer visibility ('setTextVisible') and never reads this.
+setResultsVisible :: Store -> SessionId -> QuestionKey -> Bool -> IO (Either Text ())
+setResultsVisible store sid qkey visible = apply store $ \w ->
+  case Map.lookup sid (worldSessions w) of
+    Nothing -> Left ("no session " <> unSessionId sid)
+    Just st
+      | any ((== qkey) . questionKey) (quizQuestions (stateQuiz st)) ->
+          Right ([ResultsVisibilitySet sid qkey visible], ())
+      | otherwise -> Left ("no question '" <> unQuestionKey qkey <> "' in this quiz")
+
 -- Reading -------------------------------------------------------------------
 
 lookupQuestion :: QuestionKey -> Quiz -> Maybe Question
@@ -452,6 +478,12 @@ lookupQuestion qkey quiz =
 
 phaseOf :: QuestionKey -> SessionState -> Phase
 phaseOf qkey = fromMaybe Pending . Map.lookup qkey . statePhases
+
+-- | Whether the room currently sees this question's tally. Defaults to
+-- hidden until the presenter explicitly shows it — the point of the toggle
+-- is that results are held back until then, not visible by default.
+resultsVisibleFor :: QuestionKey -> SessionState -> Bool
+resultsVisibleFor qkey = fromMaybe False . Map.lookup qkey . stateResultsVisible
 
 -- | Oldest first, which is the order the presenter wants to read text in.
 responsesFor :: QuestionKey -> SessionState -> [Response]
@@ -616,6 +648,13 @@ instance ToJSON Event where
         , "response_id" .= unResponseId rid
         , "visible" .= visible
         ]
+    ResultsVisibilitySet sid qkey visible ->
+      object
+        [ "event" .= t "results_visibility"
+        , "session_id" .= unSessionId sid
+        , "question" .= unQuestionKey qkey
+        , "visible" .= visible
+        ]
     where
       t = id @Text
 
@@ -637,5 +676,10 @@ instance FromJSON Event where
         TextVisibilitySet
           <$> (SessionId <$> o .: "session_id")
           <*> (ResponseId <$> o .: "response_id")
+          <*> o .: "visible"
+      "results_visibility" ->
+        ResultsVisibilitySet
+          <$> (SessionId <$> o .: "session_id")
+          <*> (QuestionKey <$> o .: "question")
           <*> o .: "visible"
       _ -> fail ("unknown event type " <> show ty)

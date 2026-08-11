@@ -237,6 +237,7 @@ fragH slug qkeyRaw = do
           embedFragment
             base
             (sessionCode (stateSession st))
+            (resultsVisibleFor (QuestionKey qkeyRaw) st)
             question
             (phaseOf (QuestionKey qkeyRaw) st)
             (tallyFor question (responsesFor (QuestionKey qkeyRaw) st))
@@ -252,6 +253,7 @@ resultsH slug qkeyRaw = withActiveQuiz slug $ \st -> do
         embedResults
           base
           (sessionCode (stateSession st))
+          (resultsVisibleFor (QuestionKey qkeyRaw) st)
           question
           (phaseOf (QuestionKey qkeyRaw) st)
           (tallyFor question (responsesFor (QuestionKey qkeyRaw) st))
@@ -293,16 +295,21 @@ presenterRoutes secret =
           (setTextVisible store (sessionId (stateSession st)) (ResponseId rid) visible)
       back
 
+    -- "show"/"hide" toggle a question's tally independently of its phase —
+    -- deliberately not folded into Phase itself, so a presenter can keep
+    -- accepting answers while choosing, separately, whether the room
+    -- currently sees the running results.
     phaseActionH action qkey = withPresenter $ \st _ -> do
-      phase <- case action of
-        "open" -> pure Live
-        "close" -> pure Closed
-        "reveal" -> pure Revealed
-        _ -> throwError err404{errBody = "not found\n"}
       store <- asks envStore
-      orFail
-        =<< liftIO
-          (setPhase store (sessionId (stateSession st)) (QuestionKey qkey) phase)
+      let sid = sessionId (stateSession st)
+          qk = QuestionKey qkey
+      case action of
+        "open" -> orFail =<< liftIO (setPhase store sid qk Live)
+        "close" -> orFail =<< liftIO (setPhase store sid qk Closed)
+        "reveal" -> orFail =<< liftIO (setPhase store sid qk Revealed)
+        "show" -> orFail =<< liftIO (setResultsVisible store sid qk True)
+        "hide" -> orFail =<< liftIO (setResultsVisible store sid qk False)
+        _ -> throwError err404{errBody = "not found\n"}
       back
 
 -- Admin ---------------------------------------------------------------------
